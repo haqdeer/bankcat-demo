@@ -2,7 +2,7 @@ from sqlalchemy import text
 from src.db import get_engine
 
 DDL_STATEMENTS = [
-    # 1) clients
+    # clients
     """
     create table if not exists clients (
         id bigserial primary key,
@@ -14,7 +14,7 @@ DDL_STATEMENTS = [
     );
     """,
 
-    # 2) banks
+    # banks
     """
     create table if not exists banks (
         id bigserial primary key,
@@ -28,7 +28,7 @@ DDL_STATEMENTS = [
     );
     """,
 
-    # 3) categories
+    # categories
     """
     create table if not exists categories (
         id bigserial primary key,
@@ -41,7 +41,7 @@ DDL_STATEMENTS = [
     );
     """,
 
-    # 4) transactions_draft
+    # transactions_draft
     """
     create table if not exists transactions_draft (
         id bigserial primary key,
@@ -64,7 +64,7 @@ DDL_STATEMENTS = [
     );
     """,
 
-    # 5) transactions_committed
+    # transactions_committed
     """
     create table if not exists transactions_committed (
         id bigserial primary key,
@@ -83,7 +83,7 @@ DDL_STATEMENTS = [
     );
     """,
 
-    # 6) vendor_memory
+    # vendor_memory
     """
     create table if not exists vendor_memory (
         id bigserial primary key,
@@ -97,7 +97,7 @@ DDL_STATEMENTS = [
     );
     """,
 
-    # 7) keyword_model
+    # keyword_model
     """
     create table if not exists keyword_model (
         id bigserial primary key,
@@ -110,7 +110,7 @@ DDL_STATEMENTS = [
     );
     """,
 
-    # 8) commits
+    # commits
     """
     create table if not exists commits (
         id bigserial primary key,
@@ -126,9 +126,23 @@ DDL_STATEMENTS = [
     """,
 ]
 
+MIGRATIONS = [
+    # Soft delete / disable flags
+    "alter table clients add column if not exists is_active boolean not null default true;",
+    "alter table banks add column if not exists is_active boolean not null default true;",
+    "alter table categories add column if not exists is_active boolean not null default true;",
+
+    # Optional updated_at (useful for audit / UI)
+    "alter table clients add column if not exists updated_at timestamptz;",
+    "alter table banks add column if not exists updated_at timestamptz;",
+    "alter table categories add column if not exists updated_at timestamptz;",
+]
+
 def init_db() -> str:
     engine = get_engine()
     with engine.begin() as conn:
         for ddl in DDL_STATEMENTS:
             conn.execute(text(ddl))
-    return "DB schema initialized (tables created/verified)."
+        for m in MIGRATIONS:
+            conn.execute(text(m))
+    return "DB schema initialized + migrated (tables created/verified + columns ensured)."
