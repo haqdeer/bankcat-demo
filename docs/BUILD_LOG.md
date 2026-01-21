@@ -54,3 +54,12 @@
 
 ### Next step
 - Build Intro screen UI to add Clients, Banks, Categories into DB
+### What we built
+- Intro UI: Create/list Clients, Banks, Categories (saved in Postgres)
+
+### Files changed
+- app.py
+- src/crud.py
+
+### Tests done
+- Created 1 client, added 1 bank, added 3 categories via UI
