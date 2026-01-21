@@ -54,7 +54,7 @@ with st.sidebar:
 
 st.divider()
 
-# ------------------ Page: Intro (Clients + Banks + Categories) ------------------
+# ------------------ Intro (Clients + Banks + Categories) ------------------
 st.subheader("Intro (Client Profile & Masters)")
 
 clients = cached_clients()
@@ -98,7 +98,7 @@ if not selected_client_id:
     st.info("Select a client above to manage Banks and Categories.")
     st.stop()
 
-# ------------------ Banks Section ------------------
+# ------------------ Banks ------------------
 st.markdown("### B) Banks (Client-specific Master)")
 banks = cached_banks(selected_client_id)
 banks_df = pd.DataFrame(banks) if banks else pd.DataFrame(columns=[
@@ -130,7 +130,7 @@ with st.form("add_bank_form", clear_on_submit=True):
 
 st.divider()
 
-# ------------------ Categories Section ------------------
+# ------------------ Categories ------------------
 st.markdown("### C) Category Master (Client-specific)")
 
 cats = cached_categories(selected_client_id)
@@ -139,28 +139,26 @@ cats_df = pd.DataFrame(cats) if cats else pd.DataFrame(columns=[
 ])
 st.dataframe(cats_df, use_container_width=True, hide_index=True)
 
-# ---- Download Template ----
-st.markdown("#### Download Category Template")
+# ---- Download Template (CSV) ----
+st.markdown("#### Download Category Template (CSV)")
 tmpl = pd.DataFrame([
     {"category_name": "Meals & Entertainment", "type": "Expense", "nature": "Dr"},
     {"category_name": "Sales", "type": "Income", "nature": "Cr"},
     {"category_name": "Internal Transfer", "type": "Other", "nature": "Any"},
 ])
-buf = io.BytesIO()
-with pd.ExcelWriter(buf, engine="openpyxl") as writer:
-    tmpl.to_excel(writer, index=False, sheet_name="categories")
+csv_buf = io.StringIO()
+tmpl.to_csv(csv_buf, index=False)
 st.download_button(
-    label="Download Excel Template",
-    data=buf.getvalue(),
-    file_name="category_template.xlsx",
-    mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    label="Download CSV Template",
+    data=csv_buf.getvalue().encode("utf-8"),
+    file_name="category_template.csv",
+    mime="text/csv",
 )
-
 st.caption("User only fills: category_name (required). Type/Nature optional. System auto-generates category_code, id, created_at.")
 
 st.divider()
 
-# Manual add (still available)
+# ---- Manual add (back again) ----
 st.markdown("#### Add Single Category")
 with st.form("add_category_form", clear_on_submit=True):
     c1, c2, c3 = st.columns(3)
@@ -184,9 +182,9 @@ with st.form("add_category_form", clear_on_submit=True):
 
 st.divider()
 
-# -------- Bulk import categories from Excel/CSV --------
-st.markdown("#### Bulk Upload Categories (Excel/CSV)")
-st.caption("Minimum required column: category_name (or any column you map as Category Name). Type/Nature optional.")
+# ---- Bulk upload ----
+st.markdown("#### Bulk Upload Categories (CSV/XLSX)")
+st.caption("Tip: CSV works best (no extra dependencies). Minimum required: category_name.")
 
 upload = st.file_uploader("Upload Categories File", type=["csv", "xlsx"])
 if upload is not None:
@@ -194,6 +192,7 @@ if upload is not None:
         if upload.name.lower().endswith(".csv"):
             df = pd.read_csv(upload)
         else:
+            # XLSX needs openpyxl. If not installed, user should upload CSV.
             df = pd.read_excel(upload)
 
         if df.empty:
@@ -250,6 +249,8 @@ if upload is not None:
                 st.success(f"Imported ✅ Inserted: {result['inserted']} | Skipped: {result['skipped']} (duplicates/blank)")
                 st.rerun()
 
+    except ModuleNotFoundError as e:
+        st.error("XLSX reading requires openpyxl. Please upload CSV instead.")
     except Exception as e:
         st.error(f"Failed to read file ❌\n\n{e}")
 
