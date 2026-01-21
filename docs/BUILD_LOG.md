@@ -37,3 +37,20 @@
 
 ### Why
 - Streamlit Community Cloud had IPv6 connectivity issue causing psycopg2 “Cannot assign requested address”
+## 2026-01-21
+### What we built
+- Added DB schema initializer (core MVP tables)
+- Added “Initialize Database” button in Streamlit UI
+
+### Why
+- Required to persist multi-client masters and transactions for demo usage
+
+### Files changed
+- src/schema.py
+- app.py
+
+### Tests done
+- Clicked “Initialize Database (Create Tables)” → success message
+
+### Next step
+- Build Intro screen UI to add Clients, Banks, Categories into DB
