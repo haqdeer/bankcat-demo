@@ -73,3 +73,4 @@ Only committed data appears in reports.
 - Final decisions always belong to the user
 - Learning is client-specific
 
+Step 1: Client & Bank Setup is done inside Intro screen
