@@ -31,3 +31,9 @@
 
 ### Next step
 - Create core tables (clients, banks, categories, draft/committed, commits)
+### Fix applied
+- Switched Supabase direct host (IPv6) to Supavisor/pooler connection string (IPv4 compatible)
+- Added sslmode=require in DATABASE_URL
+
+### Why
+- Streamlit Community Cloud had IPv6 connectivity issue causing psycopg2 “Cannot assign requested address”
