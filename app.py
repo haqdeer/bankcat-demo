@@ -4,27 +4,22 @@ import pandas as pd
 
 from src.db import ping_db
 from src.schema import init_db
-from src.crud import (
-    list_clients, add_client, update_client, set_client_active, delete_client, can_delete_client,
-    list_banks, add_bank, update_bank, set_bank_active, delete_bank, can_delete_bank,
-    list_categories, add_category, update_category, set_category_active, delete_category, can_delete_category,
-    bulk_add_categories
-)
+import src.crud as crud
 
 st.set_page_config(page_title="BankCat Demo", layout="wide")
 st.title("BankCat Demo ✅")
 
 @st.cache_data(ttl=10)
 def cached_clients():
-    return list_clients(include_inactive=True)
+    return crud.list_clients(include_inactive=True)
 
 @st.cache_data(ttl=10)
 def cached_banks(client_id: int):
-    return list_banks(client_id, include_inactive=True)
+    return crud.list_banks(client_id, include_inactive=True)
 
 @st.cache_data(ttl=10)
 def cached_categories(client_id: int):
-    return list_categories(client_id, include_inactive=True)
+    return crud.list_categories(client_id, include_inactive=True)
 
 def clear_cache():
     st.cache_data.clear()
@@ -54,12 +49,11 @@ with st.sidebar:
         st.rerun()
 
 st.divider()
-
-# ------------------ Clients ------------------
 st.subheader("Intro (Client Profile & Masters)")
 
+# ------------------ Clients ------------------
 clients = cached_clients()
-client_df = pd.DataFrame(clients) if clients else pd.DataFrame(columns=["id", "name", "industry", "country", "is_active", "created_at"])
+client_df = pd.DataFrame(clients) if clients else pd.DataFrame(columns=["id","name","industry","country","is_active","created_at"])
 st.dataframe(client_df, use_container_width=True, hide_index=True)
 
 client_options = {f"{r['id']} | {r['name']}": r["id"] for r in clients} if clients else {}
@@ -86,7 +80,7 @@ with st.form("create_client_form", clear_on_submit=True):
         if not name.strip():
             st.error("Client/Company Name is required.")
         else:
-            _ = add_client(name, business_description, industry, country)
+            crud.add_client(name, business_description, industry, country)
             clear_cache()
             st.success("Client created ✅")
             st.rerun()
@@ -108,23 +102,21 @@ if current_client:
         with e2:
             e_country = st.text_input("Country", value=current_client.get("country","") or "")
             e_active = st.checkbox("Client Active", value=bool(current_client.get("is_active", True)))
-        e_bd = st.text_area("Business Description", value="", height=80)
+        e_bd = st.text_area("Business Description", value=current_client.get("business_description","") or "", height=80)
 
-        colA, colB, colC = st.columns(3)
-        with colA:
-            if st.form_submit_button("Save Client Changes"):
-                update_client(selected_client_id, e_name, e_bd, e_industry, e_country)
-                set_client_active(selected_client_id, e_active)
-                clear_cache()
-                st.success("Client updated ✅")
-                st.rerun()
+        if st.form_submit_button("Save Client Changes"):
+            crud.update_client(selected_client_id, e_name, e_bd, e_industry, e_country)
+            crud.set_client_active(selected_client_id, e_active)
+            clear_cache()
+            st.success("Client updated ✅")
+            st.rerun()
 
-    del_ok = can_delete_client(selected_client_id)
     if st.button("Delete Client (only if unused)"):
-        if not del_ok:
+        if not crud.can_delete_client(selected_client_id):
             st.error("Cannot delete: Client has banks/categories/transactions. Disable instead.")
         else:
-            if delete_client(selected_client_id):
+            ok = crud.delete_client(selected_client_id)
+            if ok:
                 clear_cache()
                 st.success("Client deleted ✅")
                 st.rerun()
@@ -135,7 +127,7 @@ st.divider()
 st.markdown("### B) Banks (Client-specific Master)")
 banks = cached_banks(selected_client_id)
 banks_df = pd.DataFrame(banks) if banks else pd.DataFrame(columns=[
-    "id", "bank_name", "account_masked", "account_type", "currency", "opening_balance", "is_active", "created_at"
+    "id","bank_name","account_masked","account_type","currency","opening_balance","is_active","created_at"
 ])
 st.dataframe(banks_df, use_container_width=True, hide_index=True)
 
@@ -143,19 +135,18 @@ with st.form("add_bank_form", clear_on_submit=True):
     b1, b2, b3 = st.columns(3)
     with b1:
         bank_name = st.text_input("Bank Name *")
-        account_type = st.selectbox("Account Type *", options=["Current", "Credit Card", "Savings", "Investment", "Wallet", "Other"])
+        account_type = st.selectbox("Account Type *", options=["Current","Credit Card","Savings","Investment","Wallet","Other"])
     with b2:
         account_masked = st.text_input("Account Number / Masked ID (optional)")
         currency = st.text_input("Currency (optional)", value="PKR")
     with b3:
         opening_balance = st.number_input("Opening Balance (optional)", value=0.0, step=1000.0)
 
-    bank_submit = st.form_submit_button("Add Bank")
-    if bank_submit:
+    if st.form_submit_button("Add Bank"):
         if not bank_name.strip():
             st.error("Bank Name is required.")
         else:
-            add_bank(selected_client_id, bank_name, account_masked, account_type, currency, opening_balance)
+            crud.add_bank(selected_client_id, bank_name, account_masked, account_type, currency, opening_balance)
             clear_cache()
             st.success("Bank added ✅")
             st.rerun()
@@ -181,17 +172,18 @@ if sel_bank_id:
                 eact = st.checkbox("Bank Active", value=bool(bank_row.get("is_active", True)))
 
             if st.form_submit_button("Save Bank Changes"):
-                update_bank(sel_bank_id, ebn, eam, eat, ecur, eob)
-                set_bank_active(sel_bank_id, eact)
+                crud.update_bank(sel_bank_id, ebn, eam, eat, ecur, eob)
+                crud.set_bank_active(sel_bank_id, eact)
                 clear_cache()
                 st.success("Bank updated ✅")
                 st.rerun()
 
         if st.button("Delete Bank (only if unused)"):
-            if not can_delete_bank(sel_bank_id):
+            if not crud.can_delete_bank(sel_bank_id):
                 st.error("Cannot delete: Bank has transactions. Disable instead.")
             else:
-                if delete_bank(sel_bank_id):
+                ok = crud.delete_bank(sel_bank_id)
+                if ok:
                     clear_cache()
                     st.success("Bank deleted ✅")
                     st.rerun()
@@ -200,10 +192,9 @@ st.divider()
 
 # ------------------ Categories ------------------
 st.markdown("### C) Category Master (Client-specific)")
-
 cats = cached_categories(selected_client_id)
 cats_df = pd.DataFrame(cats) if cats else pd.DataFrame(columns=[
-    "id", "category_code", "category_name", "type", "nature", "is_active", "created_at"
+    "id","category_code","category_name","type","nature","is_active","created_at"
 ])
 st.dataframe(cats_df, use_container_width=True, hide_index=True)
 
@@ -230,16 +221,15 @@ with st.form("add_category_form", clear_on_submit=True):
     with c1:
         category_name = st.text_input("Category Name *")
     with c2:
-        type_ = st.selectbox("Type *", options=["Income", "Expense", "Other"])
+        type_ = st.selectbox("Type *", options=["Income","Expense","Other"])
     with c3:
-        nature = st.selectbox("Nature *", options=["Dr", "Cr", "Any"])
+        nature = st.selectbox("Nature *", options=["Dr","Cr","Any"])
 
-    cat_submit = st.form_submit_button("Add Category (Single)")
-    if cat_submit:
+    if st.form_submit_button("Add Category (Single)"):
         if not category_name.strip():
             st.error("Category Name is required.")
         else:
-            add_category(selected_client_id, category_name, type_, nature)
+            crud.add_category(selected_client_id, category_name, type_, nature)
             clear_cache()
             st.success("Category added ✅")
             st.rerun()
@@ -257,23 +247,24 @@ if sel_cat_id:
             with y1:
                 ecn = st.text_input("Category Name", value=cat_row.get("category_name",""))
             with y2:
-                etp = st.selectbox("Type", options=["Income", "Expense", "Other"], index=["Income","Expense","Other"].index(cat_row.get("type","Expense")))
+                etp = st.selectbox("Type", options=["Income","Expense","Other"], index=["Income","Expense","Other"].index(cat_row.get("type","Expense")))
             with y3:
-                ent = st.selectbox("Nature", options=["Dr", "Cr", "Any"], index=["Dr","Cr","Any"].index(cat_row.get("nature","Dr")))
+                ent = st.selectbox("Nature", options=["Dr","Cr","Any"], index=["Dr","Cr","Any"].index(cat_row.get("nature","Dr")))
                 eact = st.checkbox("Category Active", value=bool(cat_row.get("is_active", True)))
 
             if st.form_submit_button("Save Category Changes"):
-                update_category(sel_cat_id, ecn, etp, ent)
-                set_category_active(sel_cat_id, eact)
+                crud.update_category(sel_cat_id, ecn, etp, ent)
+                crud.set_category_active(sel_cat_id, eact)
                 clear_cache()
                 st.success("Category updated ✅")
                 st.rerun()
 
         if st.button("Delete Category (only if unused)"):
-            if not can_delete_category(sel_cat_id):
+            if not crud.can_delete_category(sel_cat_id):
                 st.error("Cannot delete: Category is used in transactions. Disable instead.")
             else:
-                if delete_category(sel_cat_id):
+                ok = crud.delete_category(sel_cat_id)
+                if ok:
                     clear_cache()
                     st.success("Category deleted ✅")
                     st.rerun()
@@ -281,7 +272,7 @@ if sel_cat_id:
 st.divider()
 
 st.markdown("#### Bulk Upload Categories (CSV/XLSX)")
-upload = st.file_uploader("Upload Categories File", type=["csv", "xlsx"])
+upload = st.file_uploader("Upload Categories File", type=["csv","xlsx"])
 if upload is not None:
     try:
         if upload.name.lower().endswith(".csv"):
@@ -289,40 +280,23 @@ if upload is not None:
         else:
             df = pd.read_excel(upload)
 
-        if df.empty:
-            st.error("File is empty.")
-        else:
-            st.success(f"Loaded file ✅ Rows: {len(df)}")
-            st.dataframe(df.head(20), use_container_width=True)
+        cols = list(df.columns)
+        col_name = st.selectbox("Map: Category Name *", options=cols, index=0)
+        default_type = st.selectbox("Default Type", options=["Expense","Income","Other"], index=0)
+        default_nature = st.selectbox("Default Nature", options=["Dr","Cr","Any"], index=0)
 
-            cols = list(df.columns)
+        prepared = []
+        for _, r in df.iterrows():
+            prepared.append((str(r.get(col_name,"")).strip(), default_type, default_nature, None))
 
-            def guess_col(keywords):
-                for c in cols:
-                    low = str(c).lower()
-                    if any(k in low for k in keywords):
-                        return c
-                return None
-
-            guess_name = guess_col(["category", "name"]) or cols[0]
-
-            col_name = st.selectbox("Map: Category Name *", options=cols, index=cols.index(guess_name))
-            default_type = st.selectbox("Default Type (if blank)", options=["Expense", "Income", "Other"], index=0)
-            default_nature = st.selectbox("Default Nature (if blank)", options=["Dr", "Cr", "Any"], index=0)
-
-            prepared = []
-            for _, r in df.iterrows():
-                nm = str(r.get(col_name, "")).strip()
-                prepared.append((nm, default_type, default_nature, None))
-
-            if st.button("Import Categories Now"):
-                result = bulk_add_categories(selected_client_id, prepared)
-                clear_cache()
-                st.success(f"Imported ✅ Inserted: {result['inserted']} | Skipped: {result['skipped']} (duplicates/blank)")
-                st.rerun()
+        if st.button("Import Categories Now"):
+            result = crud.bulk_add_categories(selected_client_id, prepared)
+            clear_cache()
+            st.success(f"Imported ✅ Inserted: {result['inserted']} | Skipped: {result['skipped']}")
+            st.rerun()
 
     except Exception as e:
-        st.error(f"Failed to read file ❌\n\n{e}")
+        st.error(f"Import failed ❌\n\n{e}")
 
 st.divider()
 st.info("Next: Categorisation screen (upload statement → standardize → suggest → draft save).")
