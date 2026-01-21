@@ -12,6 +12,12 @@ def _q(sql: str, params: dict = None) -> List[Dict]:
         return [dict(zip(cols, row)) for row in res.fetchall()]
 
 
+def _scalar(sql: str, params: dict = None):
+    engine = get_engine()
+    with engine.connect() as conn:
+        return conn.execute(text(sql), params or {}).scalar()
+
+
 def _exec(sql: str, params: dict = None) -> None:
     engine = get_engine()
     with engine.begin() as conn:
@@ -25,8 +31,12 @@ def normalize_code(prefix: str, name: str) -> str:
     return f"{prefix}-{s[:30]}" if s else f"{prefix}-UNNAMED"
 
 
-def list_clients() -> List[Dict]:
-    return _q("select id, name, industry, country, created_at from clients order by id desc;")
+# ------------------ Clients ------------------
+
+def list_clients(include_inactive: bool = True) -> List[Dict]:
+    if include_inactive:
+        return _q("select id, name, industry, country, is_active, created_at from clients order by id desc;")
+    return _q("select id, name, industry, country, is_active, created_at from clients where is_active=true order by id desc;")
 
 
 def add_client(name: str, business_description: str, industry: str, country: str) -> int:
@@ -34,8 +44,8 @@ def add_client(name: str, business_description: str, industry: str, country: str
     with engine.begin() as conn:
         res = conn.execute(
             text("""
-                insert into clients (name, business_description, industry, country)
-                values (:name, :bd, :industry, :country)
+                insert into clients (name, business_description, industry, country, is_active)
+                values (:name, :bd, :industry, :country, true)
                 returning id;
             """),
             {
@@ -48,19 +58,56 @@ def add_client(name: str, business_description: str, industry: str, country: str
         return int(res.scalar())
 
 
-def list_banks(client_id: int) -> List[Dict]:
+def update_client(client_id: int, name: str, business_description: str, industry: str, country: str):
+    _exec("""
+        update clients
+        set name=:name, business_description=:bd, industry=:industry, country=:country, updated_at=now()
+        where id=:id;
+    """, {"id": client_id, "name": name.strip(), "bd": (business_description or "").strip(),
+          "industry": (industry or "").strip(), "country": (country or "").strip()})
+
+
+def set_client_active(client_id: int, is_active: bool):
+    _exec("update clients set is_active=:a, updated_at=now() where id=:id;", {"id": client_id, "a": is_active})
+
+
+def can_delete_client(client_id: int) -> bool:
+    banks = _scalar("select count(*) from banks where client_id=:cid;", {"cid": client_id})
+    cats = _scalar("select count(*) from categories where client_id=:cid;", {"cid": client_id})
+    td = _scalar("select count(*) from transactions_draft where client_id=:cid;", {"cid": client_id})
+    tc = _scalar("select count(*) from transactions_committed where client_id=:cid;", {"cid": client_id})
+    return (banks == 0 and cats == 0 and td == 0 and tc == 0)
+
+
+def delete_client(client_id: int) -> bool:
+    if not can_delete_client(client_id):
+        return False
+    _exec("delete from clients where id=:id;", {"id": client_id})
+    return True
+
+
+# ------------------ Banks ------------------
+
+def list_banks(client_id: int, include_inactive: bool = True) -> List[Dict]:
+    if include_inactive:
+        return _q("""
+            select id, bank_name, account_masked, account_type, currency, opening_balance, is_active, created_at
+            from banks
+            where client_id=:cid
+            order by id desc;
+        """, {"cid": client_id})
     return _q("""
-        select id, bank_name, account_masked, account_type, currency, opening_balance, created_at
+        select id, bank_name, account_masked, account_type, currency, opening_balance, is_active, created_at
         from banks
-        where client_id=:cid
+        where client_id=:cid and is_active=true
         order by id desc;
     """, {"cid": client_id})
 
 
 def add_bank(client_id: int, bank_name: str, account_masked: str, account_type: str, currency: str, opening_balance):
     _exec("""
-        insert into banks (client_id, bank_name, account_masked, account_type, currency, opening_balance)
-        values (:cid, :bn, :am, :at, :cur, :ob);
+        insert into banks (client_id, bank_name, account_masked, account_type, currency, opening_balance, is_active)
+        values (:cid, :bn, :am, :at, :cur, :ob, true);
     """, {
         "cid": client_id,
         "bn": (bank_name or "").strip(),
@@ -71,11 +118,46 @@ def add_bank(client_id: int, bank_name: str, account_masked: str, account_type: 
     })
 
 
-def list_categories(client_id: int) -> List[Dict]:
+def update_bank(bank_id: int, bank_name: str, account_masked: str, account_type: str, currency: str, opening_balance):
+    _exec("""
+        update banks
+        set bank_name=:bn, account_masked=:am, account_type=:at, currency=:cur, opening_balance=:ob, updated_at=now()
+        where id=:id;
+    """, {"id": bank_id, "bn": bank_name.strip(), "am": (account_masked or "").strip(),
+          "at": account_type.strip(), "cur": (currency or "").strip(), "ob": opening_balance})
+
+
+def set_bank_active(bank_id: int, is_active: bool):
+    _exec("update banks set is_active=:a, updated_at=now() where id=:id;", {"id": bank_id, "a": is_active})
+
+
+def can_delete_bank(bank_id: int) -> bool:
+    td = _scalar("select count(*) from transactions_draft where bank_id=:id;", {"id": bank_id})
+    tc = _scalar("select count(*) from transactions_committed where bank_id=:id;", {"id": bank_id})
+    return (td == 0 and tc == 0)
+
+
+def delete_bank(bank_id: int) -> bool:
+    if not can_delete_bank(bank_id):
+        return False
+    _exec("delete from banks where id=:id;", {"id": bank_id})
+    return True
+
+
+# ------------------ Categories ------------------
+
+def list_categories(client_id: int, include_inactive: bool = True) -> List[Dict]:
+    if include_inactive:
+        return _q("""
+            select id, category_code, category_name, type, nature, is_active, created_at
+            from categories
+            where client_id=:cid
+            order by id desc;
+        """, {"cid": client_id})
     return _q("""
-        select id, category_code, category_name, type, nature, created_at
+        select id, category_code, category_name, type, nature, is_active, created_at
         from categories
-        where client_id=:cid
+        where client_id=:cid and is_active=true
         order by id desc;
     """, {"cid": client_id})
 
@@ -83,21 +165,55 @@ def list_categories(client_id: int) -> List[Dict]:
 def add_category(client_id: int, category_name: str, type_: str, nature: str, category_code: Optional[str] = None):
     code = category_code.strip() if category_code and category_code.strip() else normalize_code("CAT", category_name)
     _exec("""
-        insert into categories (client_id, category_code, category_name, type, nature)
-        values (:cid, :cc, :cn, :tp, :nt);
-    """, {
-        "cid": client_id,
-        "cc": code,
-        "cn": (category_name or "").strip(),
-        "tp": (type_ or "").strip(),
-        "nt": (nature or "").strip()
-    })
+        insert into categories (client_id, category_code, category_name, type, nature, is_active)
+        values (:cid, :cc, :cn, :tp, :nt, true);
+    """, {"cid": client_id, "cc": code, "cn": (category_name or "").strip(),
+          "tp": (type_ or "").strip(), "nt": (nature or "").strip()})
 
 
-def bulk_add_categories(
-    client_id: int,
-    rows: List[Tuple[str, str, str, Optional[str]]]
-) -> Dict:
+def update_category(cat_id: int, category_name: str, type_: str, nature: str):
+    _exec("""
+        update categories
+        set category_name=:cn, type=:tp, nature=:nt, updated_at=now()
+        where id=:id;
+    """, {"id": cat_id, "cn": category_name.strip(), "tp": type_.strip(), "nt": nature.strip()})
+
+
+def set_category_active(cat_id: int, is_active: bool):
+    _exec("update categories set is_active=:a, updated_at=now() where id=:id;", {"id": cat_id, "a": is_active})
+
+
+def can_delete_category(cat_id: int) -> bool:
+    # If category_name is used in transactions_committed.category or in draft final_category/suggested_category, block delete.
+    row = _q("select client_id, category_name from categories where id=:id;", {"id": cat_id})
+    if not row:
+        return False
+    client_id = row[0]["client_id"]
+    cat_name = row[0]["category_name"]
+
+    used_committed = _scalar("""
+        select count(*) from transactions_committed
+        where client_id=:cid and category=:cn;
+    """, {"cid": client_id, "cn": cat_name})
+
+    used_draft = _scalar("""
+        select count(*) from transactions_draft
+        where client_id=:cid and (
+            final_category=:cn or suggested_category=:cn
+        );
+    """, {"cid": client_id, "cn": cat_name})
+
+    return (used_committed == 0 and used_draft == 0)
+
+
+def delete_category(cat_id: int) -> bool:
+    if not can_delete_category(cat_id):
+        return False
+    _exec("delete from categories where id=:id;", {"id": cat_id})
+    return True
+
+
+def bulk_add_categories(client_id: int, rows: List[Tuple[str, str, str, Optional[str]]]) -> Dict:
     existing = _q("select lower(category_name) as nm from categories where client_id=:cid;", {"cid": client_id})
     existing_names = {r["nm"] for r in existing if r.get("nm")}
 
@@ -124,8 +240,8 @@ def bulk_add_categories(
     with engine.begin() as conn:
         conn.execute(
             text("""
-                insert into categories (client_id, category_code, category_name, type, nature)
-                values (:cid, :cc, :cn, :tp, :nt);
+                insert into categories (client_id, category_code, category_name, type, nature, is_active)
+                values (:cid, :cc, :cn, :tp, :nt, true);
             """),
             cleaned
         )
