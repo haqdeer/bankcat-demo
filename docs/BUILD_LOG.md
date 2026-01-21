@@ -1,3 +1,5 @@
+### What we built
+- Added Edit + Disable/Enable + Safe Delete for Clients/Banks/Categories (soft-delete)
 ## 2026-01-21
 ### What we built
 - Initial Streamlit app deployed on Streamlit Community Cloud
