@@ -87,3 +87,17 @@
 ### Known issues / next step
 - Restore full Step-5 Upload→Draft UI together with Step-6 on same page
 - Add Step-7 Commit + Learning + Accuracy metrics
+## 2026-01-22
+### What we built
+- Restored Step-5 Upload→Map→Standardize→Save Draft UI
+- Kept Step-6 Suggest→Review UI together (single page, stable)
+
+### Files changed
+- app.py
+
+### Tests done
+- Uploaded CSV and saved draft successfully
+- Processed suggestions and saved review (final_category/final_vendor)
+
+### Next
+- Step-7 Commit/Lock + Learning (vendor_memory + keyword_model) + Accuracy metrics
