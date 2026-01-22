@@ -209,13 +209,16 @@ def bulk_add_categories(client_id: int, rows: List[Tuple[str, str, str, Optional
 
 # ------------------ Vendor memory ------------------
 
-def list_vendor_memory(client_id: int) -> List[Dict]:
-    return _q("""
-        select vendor_name, category_name, confidence
-        from vendor_memory
-        where client_id=:cid
-        order by confidence desc, vendor_name asc;
-    """, {"cid": client_id})
+def list_vendor_memory(client_id: int):
+    try:
+        return _q("""
+            select vendor_name, category_name, confidence
+            from vendor_memory
+            where client_id=:cid
+            order by confidence desc, vendor_name asc;
+        """, {"cid": client_id})
+    except Exception:
+        return []
 
 
 # ------------------ Draft Transactions ------------------
