@@ -124,4 +124,17 @@ Columns:
 - row_count
 - accuracy_percent
 - created_at
+## transactions_draft (working table)
+Purpose: Stores standardized transactions before commit (editable).
+Key columns:
+- client_id, bank_id, period
+- tx_date, description, debit, credit, balance
+- suggested_category, suggested_vendor, confidence, reason
+- final_category, final_vendor
+Note: Review saves update final_* inside draft. Commit will copy to committed table.
+
+## vendor_memory (learning)
+Purpose: Client-wise vendor→category memory used for suggestions.
+Columns:
+- client_id, vendor_name, category_name, confidence, created_at
 
