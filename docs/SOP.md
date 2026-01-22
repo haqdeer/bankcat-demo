@@ -74,3 +74,18 @@ Only committed data appears in reports.
 - Learning is client-specific
 
 Step 1: Client & Bank Setup is done inside Intro screen
+## Categorisation (Mode-1 CSV)
+
+### Step-5: Upload → Map → Standardize → Save Draft
+- User selects Client, Bank, Period
+- Upload CSV (already converted)
+- Map columns to standard fields (Date, Description, Dr, Cr, Closing optional)
+- System parses dates (supports missing year by using selected Period year)
+- Save Draft stores rows in `transactions_draft` for that client+bank+period
+
+### Step-6: Suggest → Review
+- User clicks "Process Suggestions" to fill:
+  suggested_category, suggested_vendor, confidence, reason
+- User reviews and sets:
+  final_category (dropdown), final_vendor (text)
+- "Save Review Changes" updates draft rows only (not committed)
