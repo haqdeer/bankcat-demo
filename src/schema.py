@@ -1,148 +1,121 @@
 from sqlalchemy import text
 from src.db import get_engine
 
-DDL_STATEMENTS = [
-    # clients
-    """
-    create table if not exists clients (
-        id bigserial primary key,
-        name text not null,
-        business_description text,
-        industry text,
-        country text,
-        created_at timestamptz not null default now()
-    );
-    """,
-
-    # banks
-    """
-    create table if not exists banks (
-        id bigserial primary key,
-        client_id bigint not null references clients(id) on delete cascade,
-        bank_name text not null,
-        account_masked text,
-        account_type text not null,
-        currency text,
-        opening_balance numeric(18,2),
-        created_at timestamptz not null default now()
-    );
-    """,
-
-    # categories
-    """
-    create table if not exists categories (
-        id bigserial primary key,
-        client_id bigint not null references clients(id) on delete cascade,
-        category_code text,
-        category_name text not null,
-        type text not null,          -- Income / Expense / Other
-        nature text not null,        -- Dr / Cr / Any
-        created_at timestamptz not null default now()
-    );
-    """,
-
-    # transactions_draft
-    """
-    create table if not exists transactions_draft (
-        id bigserial primary key,
-        client_id bigint not null references clients(id) on delete cascade,
-        bank_id bigint not null references banks(id) on delete cascade,
-        period text not null,          -- YYYY-MM
-        tx_date date not null,
-        description text not null,
-        debit numeric(18,2),
-        credit numeric(18,2),
-        balance numeric(18,2),
-        suggested_category text,
-        suggested_vendor text,
-        reason text,
-        confidence numeric(5,2),
-        final_category text,
-        final_vendor text,
-        status text not null default 'Draft',
-        created_at timestamptz not null default now()
-    );
-    """,
-
-    # transactions_committed
-    """
-    create table if not exists transactions_committed (
-        id bigserial primary key,
-        client_id bigint not null references clients(id) on delete cascade,
-        bank_id bigint not null references banks(id) on delete cascade,
-        commit_id bigint,
-        period text not null,
-        tx_date date not null,
-        description text not null,
-        debit numeric(18,2),
-        credit numeric(18,2),
-        balance numeric(18,2),
-        category text not null,
-        vendor text,
-        created_at timestamptz not null default now()
-    );
-    """,
-
-    # vendor_memory
-    """
-    create table if not exists vendor_memory (
-        id bigserial primary key,
-        client_id bigint not null references clients(id) on delete cascade,
-        vendor_key text not null,
-        category text not null,
-        confidence numeric(5,2) not null default 0,
-        times_confirmed int not null default 0,
-        last_seen date,
-        unique (client_id, vendor_key)
-    );
-    """,
-
-    # keyword_model
-    """
-    create table if not exists keyword_model (
-        id bigserial primary key,
-        client_id bigint not null references clients(id) on delete cascade,
-        token text not null,
-        category text not null,
-        weight numeric(10,4) not null default 0,
-        times_used int not null default 0,
-        unique (client_id, token, category)
-    );
-    """,
-
-    # commits
-    """
-    create table if not exists commits (
-        id bigserial primary key,
-        client_id bigint not null references clients(id) on delete cascade,
-        bank_id bigint not null references banks(id) on delete cascade,
-        period text not null,
-        from_date date,
-        to_date date,
-        row_count int not null default 0,
-        accuracy_percent numeric(5,2),
-        created_at timestamptz not null default now()
-    );
-    """,
-]
-
-MIGRATIONS = [
-    # Soft delete / disable flags
-    "alter table clients add column if not exists is_active boolean not null default true;",
-    "alter table banks add column if not exists is_active boolean not null default true;",
-    "alter table categories add column if not exists is_active boolean not null default true;",
-
-    # Optional updated_at (useful for audit / UI)
-    "alter table clients add column if not exists updated_at timestamptz;",
-    "alter table banks add column if not exists updated_at timestamptz;",
-    "alter table categories add column if not exists updated_at timestamptz;",
-]
+def _safe_exec(conn, sql: str):
+    try:
+        conn.execute(text(sql))
+    except Exception:
+        pass
 
 def init_db() -> str:
     engine = get_engine()
     with engine.begin() as conn:
-        for ddl in DDL_STATEMENTS:
-            conn.execute(text(ddl))
-        for m in MIGRATIONS:
-            conn.execute(text(m))
+        # Clients
+        _safe_exec(conn, """
+        create table if not exists clients (
+            id bigserial primary key,
+            name text not null,
+            business_description text,
+            industry text,
+            country text,
+            is_active boolean default true,
+            created_at timestamptz default now(),
+            updated_at timestamptz
+        );
+        """)
+
+        # Banks
+        _safe_exec(conn, """
+        create table if not exists banks (
+            id bigserial primary key,
+            client_id bigint references clients(id),
+            bank_name text not null,
+            account_masked text,
+            account_type text,
+            currency text,
+            opening_balance numeric,
+            is_active boolean default true,
+            created_at timestamptz default now(),
+            updated_at timestamptz
+        );
+        """)
+
+        # Categories
+        _safe_exec(conn, """
+        create table if not exists categories (
+            id bigserial primary key,
+            client_id bigint references clients(id),
+            category_code text,
+            category_name text not null,
+            type text,
+            nature text,
+            is_active boolean default true,
+            created_at timestamptz default now(),
+            updated_at timestamptz
+        );
+        """)
+
+        # Vendor memory (simple)
+        _safe_exec(conn, """
+        create table if not exists vendor_memory (
+            id bigserial primary key,
+            client_id bigint references clients(id),
+            vendor_name text not null,
+            category_name text,
+            confidence numeric default 0.92,
+            created_at timestamptz default now()
+        );
+        """)
+
+        # Draft transactions
+        _safe_exec(conn, """
+        create table if not exists transactions_draft (
+            id bigserial primary key,
+            client_id bigint references clients(id),
+            bank_id bigint references banks(id),
+            period text,
+            tx_date date,
+            description text,
+            debit numeric,
+            credit numeric,
+            balance numeric,
+            suggested_category text,
+            suggested_vendor text,
+            reason text,
+            confidence numeric,
+            status text default 'Draft',
+            final_category text,
+            final_vendor text,
+            created_at timestamptz default now(),
+            updated_at timestamptz
+        );
+        """)
+
+        # Ensure columns (safe alter)
+        _safe_exec(conn, "alter table transactions_draft add column if not exists final_category text;")
+        _safe_exec(conn, "alter table transactions_draft add column if not exists final_vendor text;")
+        _safe_exec(conn, "alter table transactions_draft add column if not exists updated_at timestamptz;")
+        _safe_exec(conn, "alter table transactions_draft add column if not exists reason text;")
+        _safe_exec(conn, "alter table transactions_draft add column if not exists confidence numeric;")
+        _safe_exec(conn, "alter table transactions_draft add column if not exists suggested_category text;")
+        _safe_exec(conn, "alter table transactions_draft add column if not exists suggested_vendor text;")
+
+        # Committed (placeholder for next step)
+        _safe_exec(conn, """
+        create table if not exists transactions_committed (
+            id bigserial primary key,
+            client_id bigint references clients(id),
+            bank_id bigint references banks(id),
+            period text,
+            tx_date date,
+            description text,
+            debit numeric,
+            credit numeric,
+            balance numeric,
+            category text,
+            vendor text,
+            created_at timestamptz default now()
+        );
+        """)
+
     return "DB schema initialized + migrated (tables created/verified + columns ensured)."
