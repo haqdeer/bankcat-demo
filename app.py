@@ -26,7 +26,10 @@ def cached_categories(client_id: int):
 
 @st.cache_data(ttl=10)
 def cached_vendor_memory(client_id: int):
-    return crud.list_vendor_memory(client_id)
+    # If vendor memory is not implemented in crud yet, keep app running
+    if hasattr(crud, "list_vendor_memory"):
+        return crud.list_vendor_memory(client_id)
+    return []
 
 def clear_cache():
     st.cache_data.clear()
