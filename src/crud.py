@@ -336,3 +336,10 @@ def save_review_bulk(rows: List[Dict]) -> int:
             [{"id": r["id"], "fc": r.get("final_category"), "fv": r.get("final_vendor")} for r in rows]
         )
     return len(rows)
+def list_vendor_memory(client_id: int):
+    return _q("""
+        select vendor_name, category_name, confidence
+        from vendor_memory
+        where client_id=:cid
+        order by confidence desc, vendor_name asc;
+    """, {"cid": client_id})
