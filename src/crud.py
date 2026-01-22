@@ -184,7 +184,6 @@ def set_category_active(cat_id: int, is_active: bool):
 
 
 def can_delete_category(cat_id: int) -> bool:
-    # If category_name is used in transactions_committed.category or in draft final_category/suggested_category, block delete.
     row = _q("select client_id, category_name from categories where id=:id;", {"id": cat_id})
     if not row:
         return False
@@ -247,3 +246,73 @@ def bulk_add_categories(client_id: int, rows: List[Tuple[str, str, str, Optional
         )
 
     return {"inserted": len(cleaned), "skipped": len(rows) - len(cleaned)}
+
+
+# ------------------ Draft Transactions (Step-5) ------------------
+
+def list_draft_periods(client_id: int, bank_id: int) -> List[Dict]:
+    return _q("""
+        select period, count(*) as row_count, min(tx_date) as min_date, max(tx_date) as max_date, max(created_at) as last_saved
+        from transactions_draft
+        where client_id=:cid and bank_id=:bid
+        group by period
+        order by period desc;
+    """, {"cid": client_id, "bid": bank_id})
+
+
+def get_draft_sample(client_id: int, bank_id: int, period: str, limit: int = 200) -> List[Dict]:
+    return _q("""
+        select id, tx_date, description, debit, credit, balance, suggested_category, suggested_vendor, confidence, status
+        from transactions_draft
+        where client_id=:cid and bank_id=:bid and period=:p
+        order by tx_date asc, id asc
+        limit :lim;
+    """, {"cid": client_id, "bid": bank_id, "p": period, "lim": limit})
+
+
+def delete_draft_period(client_id: int, bank_id: int, period: str) -> int:
+    engine = get_engine()
+    with engine.begin() as conn:
+        res = conn.execute(text("""
+            delete from transactions_draft
+            where client_id=:cid and bank_id=:bid and period=:p;
+        """), {"cid": client_id, "bid": bank_id, "p": period})
+        return res.rowcount or 0
+
+
+def insert_draft_bulk(client_id: int, bank_id: int, period: str, rows: List[Dict]) -> int:
+    """
+    rows must include: tx_date (date), description (text), debit, credit, balance
+    optional: suggested_category, suggested_vendor, reason, confidence
+    """
+    if not rows:
+        return 0
+
+    engine = get_engine()
+    with engine.begin() as conn:
+        conn.execute(
+            text("""
+                insert into transactions_draft
+                (client_id, bank_id, period, tx_date, description, debit, credit, balance,
+                 suggested_category, suggested_vendor, reason, confidence, status)
+                values
+                (:client_id, :bank_id, :period, :tx_date, :description, :debit, :credit, :balance,
+                 :suggested_category, :suggested_vendor, :reason, :confidence, 'Draft');
+            """),
+            [{
+                "client_id": client_id,
+                "bank_id": bank_id,
+                "period": period,
+                "tx_date": r["tx_date"],
+                "description": r["description"],
+                "debit": r.get("debit"),
+                "credit": r.get("credit"),
+                "balance": r.get("balance"),
+                "suggested_category": r.get("suggested_category"),
+                "suggested_vendor": r.get("suggested_vendor"),
+                "reason": r.get("reason"),
+                "confidence": r.get("confidence"),
+            } for r in rows]
+        )
+
+    return len(rows)
