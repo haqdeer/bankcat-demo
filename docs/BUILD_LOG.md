@@ -101,3 +101,10 @@
 
 ### Next
 - Step-7 Commit/Lock + Learning (vendor_memory + keyword_model) + Accuracy metrics
+### Step-7: Commit / Lock
+- User reviews draft and clicks Commit
+- Draft rows are copied to committed table (read-only)
+- System learns:
+  - Vendor → Category (vendor_memory)
+  - Keywords → Category (keyword_model)
+- Accuracy metrics updated per commit
