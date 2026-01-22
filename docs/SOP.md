@@ -89,3 +89,10 @@ Step 1: Client & Bank Setup is done inside Intro screen
 - User reviews and sets:
   final_category (dropdown), final_vendor (text)
 - "Save Review Changes" updates draft rows only (not committed)
+### Step-7: Commit / Lock
+- User reviews draft and clicks Commit
+- Draft rows are copied to committed table (read-only)
+- System learns:
+  - Vendor → Category (vendor_memory)
+  - Keywords → Category (keyword_model)
+- Accuracy metrics updated per commit
