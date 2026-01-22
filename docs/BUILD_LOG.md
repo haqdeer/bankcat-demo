@@ -65,3 +65,25 @@
 
 ### Tests done
 - Created 1 client, added 1 bank, added 3 categories via UI
+## 2026-01-22
+### What we built
+- Step-6 Suggest + Review screen
+- Added suggestion engine (rules + nature + account type)
+- Added safe vendor_memory handling to prevent app crash
+
+### Why
+- Enable human-in-the-loop categorisation before commit
+
+### Files changed
+- app.py
+- src/engine.py
+- src/crud.py
+- src/schema.py
+
+### Tests done
+- Loaded CSV draft and processed suggestions successfully
+- Edited final_category and saved changes to draft
+
+### Known issues / next step
+- Restore full Step-5 Upload→Draft UI together with Step-6 on same page
+- Add Step-7 Commit + Learning + Accuracy metrics
