@@ -96,3 +96,10 @@ Step 1: Client & Bank Setup is done inside Intro screen
   - Vendor → Category (vendor_memory)
   - Keywords → Category (keyword_model)
 - Accuracy metrics updated per commit
+### Step-7: Commit / Lock / Learn
+- Commit copies draft rows to transactions_committed (read-only)
+- Updates draft_batches status to Committed
+- Updates learning:
+  - vendor_memory: vendor → category (+confidence)
+  - keyword_model: tokens → category (weights)
+- Stores commit metrics: rows_committed, accuracy
