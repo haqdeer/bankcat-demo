@@ -108,3 +108,19 @@
   - Vendor → Category (vendor_memory)
   - Keywords → Category (keyword_model)
 - Accuracy metrics updated per commit
+## 2026-01-22
+### What we built
+- Step-7 Commit/Lock workflow + learning
+- Draft status tracking via draft_batches (Imported → System Categorised → User Completed → Committed)
+
+### Files changed
+- app.py
+- src/crud.py
+- src/schema.py
+
+### Tests done
+- Commit blocked when final_category missing
+- Commit succeeded after completing review; committed sample visible
+
+### Next
+- Dashboard: P&L + Accuracy metrics from commits + committed data
