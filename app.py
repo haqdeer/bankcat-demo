@@ -9,11 +9,9 @@ from src.schema import init_db
 import src.crud as crud
 from src.engine import suggest_one
 
-# ---------------- Page config ----------------
 st.set_page_config(page_title="BankCat Demo", layout="wide")
 st.title("BankCat Demo ✅")
 
-# ---------------- Cache helpers (speed) ----------------
 @st.cache_data(ttl=10)
 def cached_clients():
     return crud.list_clients(include_inactive=True)
@@ -29,7 +27,6 @@ def cached_categories(client_id: int):
 def clear_cache():
     st.cache_data.clear()
 
-# Vendor memory must NEVER crash app
 def safe_vendor_memory(client_id: int):
     if hasattr(crud, "list_vendor_memory"):
         try:
@@ -38,7 +35,7 @@ def safe_vendor_memory(client_id: int):
             return []
     return []
 
-# ---------------- Sidebar utilities ----------------
+# ---------------- Sidebar ----------------
 with st.sidebar:
     st.header("Utilities")
 
@@ -65,20 +62,18 @@ with st.sidebar:
 
 st.divider()
 
-# =========================================================
-# 1) INTRO + MASTERS (Do NOT remove going forward)
-# =========================================================
+# =========================
+# 1) INTRO
+# =========================
 st.subheader("1) Intro (Client Profile & Masters)")
 
 clients = cached_clients()
-client_df = pd.DataFrame(clients) if clients else pd.DataFrame(columns=["id","name","industry","country","is_active","created_at"])
-st.dataframe(client_df, use_container_width=True, hide_index=True)
+st.dataframe(pd.DataFrame(clients), use_container_width=True, hide_index=True)
 
 client_options = {f"{r['id']} | {r['name']}": r["id"] for r in clients} if clients else {}
 selected_label = st.selectbox("Select Client", options=["(Create new client first)"] + list(client_options.keys()))
 client_id = client_options.get(selected_label)
 
-# ---------- Create Client ----------
 st.markdown("### Create New Client")
 with st.form("create_client_form", clear_on_submit=True):
     c1, c2 = st.columns(2)
@@ -102,20 +97,14 @@ with st.form("create_client_form", clear_on_submit=True):
             st.rerun()
 
 if not client_id:
-    st.info("Select a client above to manage Banks, Categories, and Upload drafts.")
     st.stop()
 
-# Load masters for selected client
 banks = cached_banks(client_id)
 cats = cached_categories(client_id)
 
-# ---------- Banks Master ----------
 st.divider()
 st.markdown("## Banks (Client-specific Master)")
-banks_df = pd.DataFrame(banks) if banks else pd.DataFrame(columns=[
-    "id","bank_name","account_masked","account_type","currency","opening_balance","is_active","created_at"
-])
-st.dataframe(banks_df, use_container_width=True, hide_index=True)
+st.dataframe(pd.DataFrame(banks), use_container_width=True, hide_index=True)
 
 with st.form("add_bank_form", clear_on_submit=True):
     b1, b2, b3 = st.columns(3)
@@ -137,51 +126,9 @@ with st.form("add_bank_form", clear_on_submit=True):
             st.success("Bank added ✅")
             st.rerun()
 
-st.markdown("### Edit / Disable / Delete Bank")
-bank_options_all = {f"{b['id']} | {b['bank_name']}": b["id"] for b in banks} if banks else {}
-bank_label_edit = st.selectbox("Select Bank to edit", options=["(none)"] + list(bank_options_all.keys()), key="bank_edit_sel")
-sel_bank_id = bank_options_all.get(bank_label_edit)
-
-if sel_bank_id:
-    bank_row = next((b for b in banks if b["id"] == sel_bank_id), None)
-    if bank_row:
-        with st.form("edit_bank_form"):
-            x1, x2, x3 = st.columns(3)
-            with x1:
-                ebn = st.text_input("Bank Name", value=bank_row.get("bank_name",""))
-                eat = st.text_input("Account Type", value=bank_row.get("account_type",""))
-            with x2:
-                eam = st.text_input("Masked Account", value=bank_row.get("account_masked","") or "")
-                ecur = st.text_input("Currency", value=bank_row.get("currency","") or "")
-            with x3:
-                eob = st.number_input("Opening Balance", value=float(bank_row.get("opening_balance") or 0.0), step=1000.0)
-                eact = st.checkbox("Bank Active", value=bool(bank_row.get("is_active", True)))
-
-            if st.form_submit_button("Save Bank Changes"):
-                crud.update_bank(sel_bank_id, ebn, eam, eat, ecur, eob)
-                crud.set_bank_active(sel_bank_id, eact)
-                clear_cache()
-                st.success("Bank updated ✅")
-                st.rerun()
-
-        if st.button("Delete Bank (only if unused)", key="del_bank_btn"):
-            if not crud.can_delete_bank(sel_bank_id):
-                st.error("Cannot delete: Bank has transactions. Disable instead.")
-            else:
-                ok = crud.delete_bank(sel_bank_id)
-                if ok:
-                    clear_cache()
-                    st.success("Bank deleted ✅")
-                    st.rerun()
-
-# ---------- Categories Master ----------
 st.divider()
 st.markdown("## Categories (Client-specific Master)")
-
-cats_df = pd.DataFrame(cats) if cats else pd.DataFrame(columns=[
-    "id","category_code","category_name","type","nature","is_active","created_at"
-])
-st.dataframe(cats_df, use_container_width=True, hide_index=True)
+st.dataframe(pd.DataFrame(cats), use_container_width=True, hide_index=True)
 
 st.markdown("### Download Category Template (CSV)")
 tmpl_cat = pd.DataFrame([
@@ -250,25 +197,23 @@ if upload_cat is not None:
 
 st.divider()
 
-# =========================================================
-# 2) CATEGORISATION (Step-5 + Step-6 together, stable UI)
-# =========================================================
-st.subheader("2) Categorisation (Upload → Map → Standardize → Save Draft → Suggest → Review)")
+# =========================
+# 2) CATEGORISATION
+# =========================
+st.subheader("2) Categorisation (Upload → Map → Standardize → Save Draft → Suggest → Review → Commit)")
 
-# -------- Select bank for processing --------
 active_banks = [b for b in banks if b.get("is_active", True)]
 bank_options = {f"{b['id']} | {b['bank_name']} ({b.get('account_type','')})": b["id"] for b in active_banks}
-
 if not bank_options:
-    st.warning("No active banks found for this client. Enable a bank first.")
+    st.warning("No active banks found for this client.")
     st.stop()
 
-bank_label = st.selectbox("Select Bank (for statement upload)", options=list(bank_options.keys()), key="bank_process_sel")
+bank_label = st.selectbox("Select Bank (for statement upload)", options=list(bank_options.keys()))
 bank_id = bank_options[bank_label]
 bank_row = next((b for b in active_banks if b["id"] == bank_id), {})
 bank_account_type = bank_row.get("account_type", "")
 
-# -------- Statement period --------
+# Period
 months = [("Jan",1),("Feb",2),("Mar",3),("Apr",4),("May",5),("Jun",6),("Jul",7),("Aug",8),("Sep",9),("Oct",10),("Nov",11),("Dec",12)]
 m_labels = [m[0] for m in months]
 m_map = {m[0]: m[1] for m in months}
@@ -276,32 +221,28 @@ m_map = {m[0]: m[1] for m in months}
 st.markdown("### Statement Period")
 p1, p2, p3 = st.columns(3)
 with p1:
-    year = st.selectbox("Year", options=list(range(2020, 2031)), index=list(range(2020, 2031)).index(2025), key="period_year")
+    year = st.selectbox("Year", options=list(range(2020, 2031)), index=list(range(2020, 2031)).index(2025))
 with p2:
-    mon_label = st.selectbox("Month", options=m_labels, index=m_labels.index("Oct"), key="period_month")
+    mon_label = st.selectbox("Month", options=m_labels, index=m_labels.index("Oct"))
 with p3:
     period = f"{year}-{m_map[mon_label]:02d}"
     st.text_input("Period (auto)", value=period, disabled=True)
 
 st.caption("Period = statement month label. Even if date range overlaps months, keep period as statement month.")
 
-# -------- Date range (optional) --------
 st.markdown("### Statement Date Range (optional but recommended)")
 date_range = st.date_input(
     "Select From-To",
     value=(date(year, m_map[mon_label], 1), date(year, m_map[mon_label], 28)),
-    key="date_range"
 )
 from_date, to_date = None, None
 if isinstance(date_range, tuple) and len(date_range) == 2:
     from_date, to_date = date_range[0], date_range[1]
 
-# -------- Existing drafts for this bank --------
 st.markdown("### Existing Drafts (this client + bank)")
 draft_periods = crud.list_draft_periods(client_id, bank_id)
 st.dataframe(pd.DataFrame(draft_periods), use_container_width=True, hide_index=True)
 
-# -------- Statement template (CSV only) --------
 st.markdown("### Upload Template (CSV)")
 tmpl = pd.DataFrame([
     {"Date": "2025-10-01", "Description": "POS Purchase Example Vendor", "Dr": "100.00", "Cr": "", "Closing": "5000.00"},
@@ -318,10 +259,8 @@ st.download_button(
 st.caption("Minimum: Date + Description. Dr/Cr recommended. Closing optional (blank allowed).")
 
 st.divider()
-
-# -------- Upload CSV --------
 st.markdown("### Upload Statement (CSV) — Mode 1 (already converted)")
-upload = st.file_uploader("Upload CSV file", type=["csv"], key="stmt_upload")
+upload = st.file_uploader("Upload CSV file", type=["csv"])
 
 def clean_num(x):
     if x is None or (isinstance(x, float) and pd.isna(x)):
@@ -337,22 +276,14 @@ def clean_num(x):
         return None
 
 def parse_date_any(x, default_year: int):
-    """
-    Handles:
-    - 2025-10-01
-    - 01-10-2025 / 1/10/25
-    - 01 Oct (NO year) -> appends default_year (selected period year)
-    """
     if x is None or (isinstance(x, float) and pd.isna(x)):
         return None
     s = str(x).strip()
     if not s:
         return None
-
     has_year = bool(re.search(r"\b(19|20)\d{2}\b", s))
     if not has_year:
         s = f"{s} {default_year}"
-
     for dayfirst in (True, False):
         try:
             return pd.to_datetime(s, dayfirst=dayfirst, errors="raise").date()
@@ -365,13 +296,12 @@ def flag_amount_in_desc(desc: str) -> bool:
         return False
     return bool(re.search(r"(\b\d{1,3}(,\d{3})*(\.\d+)?\b)\s*$", desc.strip()))
 
-standardized = []  # keep in memory for this run
+standardized = []
 bad_dates_examples = []
 
 if upload is not None:
     try:
         df = pd.read_csv(upload)
-
         if df.empty:
             st.error("File is empty.")
         else:
@@ -380,10 +310,10 @@ if upload is not None:
 
             cols = list(df.columns)
 
-            def guess_col(keywords):
+            def guess_col(keys):
                 for c in cols:
                     low = str(c).lower()
-                    if any(k in low for k in keywords):
+                    if any(k in low for k in keys):
                         return c
                 return None
 
@@ -453,10 +383,8 @@ if upload is not None:
                 f"Rows parsed: **{len(standardized)}** | Dropped (missing date/desc): **{errors}** | "
                 f"Flags (amount-in-desc suspicion): **{flags}** | Out-of-range (FYI): **{out_of_range}**"
             )
-
             if bad_dates_examples:
                 st.warning(f"Some date values could not be parsed (examples): {bad_dates_examples}")
-
             st.dataframe(pd.DataFrame(standardized[:200]), use_container_width=True, hide_index=True)
 
             st.markdown("### Save Draft")
@@ -479,12 +407,12 @@ if upload is not None:
 
 st.divider()
 
-# =========================================================
-# Step-6: Suggest + Review (Works on saved draft rows)
-# =========================================================
+# =========================
+# Step-6 Suggest
+# =========================
 st.subheader("Step-6: Suggest Category + Vendor (Draft)")
 
-if st.button("Process Suggestions (for this bank+period)", key="btn_process_suggest"):
+if st.button("Process Suggestions (for this bank+period)"):
     rows = crud.get_draft_rows(client_id, bank_id, period, limit=3000)
     if not rows:
         st.warning("No draft rows found for this bank+period. Upload + Save Draft first.")
@@ -511,35 +439,33 @@ if st.button("Process Suggestions (for this bank+period)", key="btn_process_sugg
             })
 
         crud.update_suggestions_bulk(updates)
+        crud.upsert_draft_batch(client_id, bank_id, period, "System Categorised")
         st.success(f"Processed ✅ rows: {len(updates)}")
         st.rerun()
 
+# Review
 st.subheader("Review + Finalize (Draft)")
 
 rows = crud.get_draft_rows(client_id, bank_id, period, limit=500)
 if not rows:
-    st.info("No draft rows yet for this bank+period.")
+    st.info("No draft rows for this bank+period.")
 else:
     dfv = pd.DataFrame(rows)
     category_options = [c["category_name"] for c in cats if c.get("is_active", True)]
 
-    st.caption("Editable fields: final_category (dropdown) + final_vendor (text). This saves INSIDE draft (not Commit).")
-
+    st.caption("Editable fields: final_category + final_vendor. This saves INSIDE draft (not Commit).")
     edited = st.data_editor(
-        dfv[["id","tx_date","description","debit","credit","balance",
-             "suggested_category","suggested_vendor","confidence","reason",
-             "final_category","final_vendor"]],
+        dfv[["id","tx_date","description","debit","credit","balance","suggested_category","suggested_vendor","confidence","reason","final_category","final_vendor"]],
         use_container_width=True,
         hide_index=True,
         column_config={
             "final_category": st.column_config.SelectboxColumn("final_category", options=category_options),
         },
-        disabled=["id","tx_date","description","debit","credit","balance",
-                  "suggested_category","suggested_vendor","confidence","reason"],
+        disabled=["id","tx_date","description","debit","credit","balance","suggested_category","suggested_vendor","confidence","reason"],
         key="review_editor"
     )
 
-    if st.button("Save Review Changes", key="btn_save_review"):
+    if st.button("Save Review Changes"):
         changed = []
         for _, r in edited.iterrows():
             changed.append({
@@ -548,21 +474,55 @@ else:
                 "final_vendor": r.get("final_vendor")
             })
         crud.save_review_bulk(changed)
+        crud.upsert_draft_batch(client_id, bank_id, period, "User Completed")
         st.success("Saved ✅ Draft updated (final_category/final_vendor).")
         st.rerun()
 
 st.divider()
 
-# =========================================================
-# Draft viewer (extra safety / visibility)
-# =========================================================
+# =========================
+# Step-7 Commit / Lock / Learn
+# =========================
+st.subheader("Step-7: Commit / Lock / Learn (FINAL)")
+
+rows_all = crud.get_draft_rows(client_id, bank_id, period, limit=5000)
+if not rows_all:
+    st.info("No draft rows to commit for this bank+period.")
+else:
+    total = len(rows_all)
+    filled = sum(1 for r in rows_all if (r.get("final_category") and str(r.get("final_category")).strip()))
+    st.write(f"Rows in draft: **{total}** | Rows with final_category: **{filled}**")
+
+    committed_by = st.text_input("Committed by (optional)", value="")
+
+    confirm = st.checkbox("I confirm: categories/vendors are final and should be locked for reporting (Commit).", value=False)
+    if st.button("✅ Commit This Period (Lock & Learn)", disabled=not confirm):
+        result = crud.commit_period(client_id, bank_id, period, committed_by=committed_by or None)
+        if not result.get("ok"):
+            st.error(result.get("msg"))
+        else:
+            st.success(result.get("msg"))
+            st.rerun()
+
+st.markdown("### Committed Sample (this bank + period)")
+sample = crud.committed_sample(client_id, bank_id, period, limit=200)
+if sample:
+    st.dataframe(pd.DataFrame(sample), use_container_width=True, hide_index=True)
+else:
+    st.info("No committed rows yet for this period.")
+
+st.divider()
+
+# =========================
+# Draft Viewer (Sample)
+# =========================
 st.subheader("Draft Viewer (Sample)")
 
 if draft_periods:
     p_list = [d["period"] for d in draft_periods]
     sel_p = st.selectbox("Select draft period to view", options=p_list, key="draft_view_sel")
-    sample = crud.get_draft_sample(client_id, bank_id, sel_p, limit=200)
-    st.dataframe(pd.DataFrame(sample), use_container_width=True, hide_index=True)
+    sample_d = crud.get_draft_sample(client_id, bank_id, sel_p, limit=200)
+    st.dataframe(pd.DataFrame(sample_d), use_container_width=True, hide_index=True)
 
     if st.button("Delete this draft period", key="draft_del_btn"):
         deleted = crud.delete_draft_period(client_id, bank_id, sel_p)
