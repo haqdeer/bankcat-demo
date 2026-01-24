@@ -162,3 +162,10 @@ def init_db() -> str:
         """))
 
     return "DB schema initialized + migrated (tables created/verified + columns ensured)."
+        # Backfill draft_batches from existing transactions_draft (one-time safe)
+        conn.execute(text("""
+        INSERT INTO draft_batches (client_id, bank_id, period, status)
+        SELECT DISTINCT client_id, bank_id, period, 'Imported'
+        FROM transactions_draft
+        ON CONFLICT (client_id, bank_id, period) DO NOTHING;
+        """))
