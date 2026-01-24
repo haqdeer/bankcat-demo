@@ -7,8 +7,9 @@ def init_db() -> str:
     Safe to run multiple times.
     """
     engine = get_engine()
+
     with engine.begin() as conn:
-        # ---- Core masters (in case they already exist, IF NOT EXISTS keeps safe) ----
+        # ---- Core masters ----
         conn.execute(text("""
         CREATE TABLE IF NOT EXISTS clients (
             id SERIAL PRIMARY KEY,
@@ -48,7 +49,7 @@ def init_db() -> str:
         );
         """))
 
-        # ---- Draft batches (STATUS) ----
+        # ---- Draft batches (Status) ----
         conn.execute(text("""
         CREATE TABLE IF NOT EXISTS draft_batches (
             id SERIAL PRIMARY KEY,
@@ -119,7 +120,7 @@ def init_db() -> str:
         );
         """))
 
-        # ---- Commits (audit + metrics) ----
+        # ---- Commits ----
         conn.execute(text("""
         CREATE TABLE IF NOT EXISTS commits (
             id SERIAL PRIMARY KEY,
@@ -134,7 +135,7 @@ def init_db() -> str:
         );
         """))
 
-        # ---- Committed transactions (LOCKED dataset) ----
+        # ---- Committed transactions ----
         conn.execute(text("""
         CREATE TABLE IF NOT EXISTS transactions_committed (
             id SERIAL PRIMARY KEY,
@@ -161,11 +162,12 @@ def init_db() -> str:
         );
         """))
 
-    return "DB schema initialized + migrated (tables created/verified + columns ensured)."
-        # Backfill draft_batches from existing transactions_draft (one-time safe)
+        # ✅ IMPORTANT: Backfill draft_batches from existing transactions_draft
         conn.execute(text("""
         INSERT INTO draft_batches (client_id, bank_id, period, status)
         SELECT DISTINCT client_id, bank_id, period, 'Imported'
         FROM transactions_draft
         ON CONFLICT (client_id, bank_id, period) DO NOTHING;
         """))
+
+    return "DB schema initialized + migrated (tables created/verified + columns ensured)."
