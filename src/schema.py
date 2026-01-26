@@ -131,7 +131,7 @@ def init_db() -> str:
         """))
 
         # ---------------------------
-        # 5) Commits + Committed Transactions
+        # 5) Commits (create minimal, then ALTER columns)
         # ---------------------------
         conn.execute(text("""
         CREATE TABLE IF NOT EXISTS commits (
@@ -142,13 +142,16 @@ def init_db() -> str:
         );
         """))
 
-        # ✅ Upgrade-safe: ensure commits columns exist (THIS fixes your error)
+        # ✅ Upgrade-safe: ensure commits columns exist (THIS fixes committed_by error)
         conn.execute(text("ALTER TABLE commits ADD COLUMN IF NOT EXISTS committed_by TEXT;"))
         conn.execute(text("ALTER TABLE commits ADD COLUMN IF NOT EXISTS committed_at TIMESTAMPTZ DEFAULT now();"))
         conn.execute(text("ALTER TABLE commits ADD COLUMN IF NOT EXISTS rows_committed INT NOT NULL DEFAULT 0;"))
         conn.execute(text("ALTER TABLE commits ADD COLUMN IF NOT EXISTS accuracy NUMERIC;"))
         conn.execute(text("ALTER TABLE commits ADD COLUMN IF NOT EXISTS notes TEXT;"))
 
+        # ---------------------------
+        # 6) Committed Transactions
+        # ---------------------------
         conn.execute(text("""
         CREATE TABLE IF NOT EXISTS transactions_committed (
             id SERIAL PRIMARY KEY,
@@ -181,7 +184,7 @@ def init_db() -> str:
         """))
 
         # ---------------------------
-        # 6) Backfill draft_batches from existing drafts (one-time safe)
+        # 7) Backfill draft_batches from existing drafts (one-time safe)
         # ---------------------------
         conn.execute(text("""
         INSERT INTO draft_batches (client_id, bank_id, period, status)
