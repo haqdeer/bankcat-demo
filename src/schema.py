@@ -1,203 +1,196 @@
 # src/schema.py
 from sqlalchemy import text
-from src.db import get_engine
+from src.crud import get_engine
 
 
-def init_db() -> str:
+def _do(conn, sql: str):
+    conn.execute(text(sql))
+
+
+def init_db():
     """
-    Create/verify tables + upgrade-safe migrations.
+    Idempotent schema initializer + migrator.
     Safe to run multiple times.
     """
     engine = get_engine()
-
     with engine.begin() as conn:
-        # ---------------------------
-        # 1) Masters
-        # ---------------------------
-        conn.execute(text("""
+        # --- clients
+        _do(conn, """
         CREATE TABLE IF NOT EXISTS clients (
-            id SERIAL PRIMARY KEY,
+            id BIGSERIAL PRIMARY KEY,
             name TEXT NOT NULL,
-            business_description TEXT,
             industry TEXT,
             country TEXT,
-            is_active BOOLEAN DEFAULT TRUE,
-            created_at TIMESTAMPTZ DEFAULT now()
+            business_description TEXT,
+            is_active BOOLEAN NOT NULL DEFAULT TRUE,
+            created_at TIMESTAMPTZ NOT NULL DEFAULT now()
         );
-        """))
+        """)
 
-        conn.execute(text("""
+        # --- banks
+        _do(conn, """
         CREATE TABLE IF NOT EXISTS banks (
-            id SERIAL PRIMARY KEY,
-            client_id INT NOT NULL REFERENCES clients(id) ON DELETE CASCADE,
+            id BIGSERIAL PRIMARY KEY,
+            client_id BIGINT NOT NULL REFERENCES clients(id) ON DELETE CASCADE,
             bank_name TEXT NOT NULL,
-            account_masked TEXT,
-            account_type TEXT,
+            account_number_masked TEXT,
+            account_type TEXT NOT NULL DEFAULT 'Current',
             currency TEXT,
-            opening_balance NUMERIC,
-            is_active BOOLEAN DEFAULT TRUE,
-            created_at TIMESTAMPTZ DEFAULT now()
+            opening_balance NUMERIC(18,2),
+            is_active BOOLEAN NOT NULL DEFAULT TRUE,
+            created_at TIMESTAMPTZ NOT NULL DEFAULT now()
         );
-        """))
+        """)
 
-        conn.execute(text("""
+        # --- categories
+        _do(conn, """
         CREATE TABLE IF NOT EXISTS categories (
-            id SERIAL PRIMARY KEY,
-            client_id INT NOT NULL REFERENCES clients(id) ON DELETE CASCADE,
+            id BIGSERIAL PRIMARY KEY,
+            client_id BIGINT NOT NULL REFERENCES clients(id) ON DELETE CASCADE,
             category_code TEXT,
             category_name TEXT NOT NULL,
-            type TEXT NOT NULL,
-            nature TEXT NOT NULL,
-            is_active BOOLEAN DEFAULT TRUE,
-            created_at TIMESTAMPTZ DEFAULT now()
+            type TEXT NOT NULL CHECK (type IN ('Income','Expense','Other')),
+            nature TEXT NOT NULL DEFAULT 'Any',
+            is_active BOOLEAN NOT NULL DEFAULT TRUE,
+            created_at TIMESTAMPTZ NOT NULL DEFAULT now()
         );
-        """))
+        """)
 
-        # ---------------------------
-        # 2) Draft Batches
-        # ---------------------------
-        conn.execute(text("""
-        CREATE TABLE IF NOT EXISTS draft_batches (
-            id SERIAL PRIMARY KEY,
-            client_id INT NOT NULL REFERENCES clients(id) ON DELETE CASCADE,
-            bank_id INT NOT NULL REFERENCES banks(id) ON DELETE CASCADE,
-            period TEXT NOT NULL,
-            status TEXT NOT NULL DEFAULT 'Imported',
-            created_at TIMESTAMPTZ DEFAULT now(),
-            updated_at TIMESTAMPTZ DEFAULT now(),
-            UNIQUE (client_id, bank_id, period)
-        );
-        """))
-
-        # ---------------------------
-        # 3) Draft Transactions
-        # ---------------------------
-        conn.execute(text("""
+        # --- transactions_draft
+        _do(conn, """
         CREATE TABLE IF NOT EXISTS transactions_draft (
-            id SERIAL PRIMARY KEY,
-            client_id INT NOT NULL REFERENCES clients(id) ON DELETE CASCADE,
-            bank_id INT NOT NULL REFERENCES banks(id) ON DELETE CASCADE,
-            period TEXT NOT NULL,
-
+            id BIGSERIAL PRIMARY KEY,
+            client_id BIGINT NOT NULL REFERENCES clients(id) ON DELETE CASCADE,
+            bank_id BIGINT NOT NULL REFERENCES banks(id) ON DELETE CASCADE,
+            period TEXT NOT NULL, -- YYYY-MM
             tx_date DATE NOT NULL,
             description TEXT NOT NULL,
-            debit NUMERIC,
-            credit NUMERIC,
-            balance NUMERIC,
-
-            suggested_category TEXT,
-            suggested_vendor TEXT,
-            confidence NUMERIC,
-            reason TEXT,
-
+            debit NUMERIC(18,2) DEFAULT 0,
+            credit NUMERIC(18,2) DEFAULT 0,
+            balance NUMERIC(18,2),
             final_category TEXT,
             final_vendor TEXT,
-
-            created_at TIMESTAMPTZ DEFAULT now()
+            suggested_category TEXT,
+            suggested_vendor TEXT,
+            confidence NUMERIC(5,4),
+            reason TEXT,
+            status TEXT NOT NULL DEFAULT 'NOT_CATEGORISED', -- NOT_CATEGORISED|SYSTEM_SUGGESTED|USER_FINALISED
+            created_at TIMESTAMPTZ NOT NULL DEFAULT now()
         );
-        """))
+        """)
 
-        conn.execute(text("""
-        CREATE INDEX IF NOT EXISTS idx_draft_client_bank_period
-        ON transactions_draft(client_id, bank_id, period);
-        """))
+        _do(conn, """
+        CREATE INDEX IF NOT EXISTS idx_draft_lookup
+        ON transactions_draft (client_id, bank_id, period);
+        """)
 
-        # ---------------------------
-        # 4) Vendor Memory
-        # ---------------------------
-        conn.execute(text("""
-        CREATE TABLE IF NOT EXISTS vendor_memory (
-            id SERIAL PRIMARY KEY,
-            client_id INT NOT NULL REFERENCES clients(id) ON DELETE CASCADE,
-            vendor_name TEXT NOT NULL,
-            category_name TEXT NOT NULL,
-            confidence NUMERIC NOT NULL DEFAULT 0.50,
-            created_at TIMESTAMPTZ DEFAULT now(),
-            updated_at TIMESTAMPTZ DEFAULT now(),
-            UNIQUE (client_id, vendor_name)
-        );
-        """))
-
-        # ---------------------------
-        # 5) Keyword Model (IMPORTANT for commit learning)
-        # ---------------------------
-        conn.execute(text("""
-        CREATE TABLE IF NOT EXISTS keyword_model (
-            id SERIAL PRIMARY KEY,
-            client_id INT NOT NULL REFERENCES clients(id) ON DELETE CASCADE,
-            token TEXT NOT NULL,
-            category_name TEXT NOT NULL,
-            weight NUMERIC NOT NULL DEFAULT 0,
-            updated_at TIMESTAMPTZ DEFAULT now(),
-            UNIQUE (client_id, token, category_name)
-        );
-        """))
-
-        # Upgrade-safe ensures (even if table existed before)
-        conn.execute(text("ALTER TABLE keyword_model ADD COLUMN IF NOT EXISTS weight NUMERIC NOT NULL DEFAULT 0;"))
-        conn.execute(text("ALTER TABLE keyword_model ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ DEFAULT now();"))
-
-        # ---------------------------
-        # 6) Commits (create minimal + alter missing cols)
-        # ---------------------------
-        conn.execute(text("""
+        # --- commits
+        _do(conn, """
         CREATE TABLE IF NOT EXISTS commits (
-            id SERIAL PRIMARY KEY,
-            client_id INT NOT NULL REFERENCES clients(id) ON DELETE CASCADE,
-            bank_id INT NOT NULL REFERENCES banks(id) ON DELETE CASCADE,
-            period TEXT NOT NULL
-        );
-        """))
-
-        conn.execute(text("ALTER TABLE commits ADD COLUMN IF NOT EXISTS committed_by TEXT;"))
-        conn.execute(text("ALTER TABLE commits ADD COLUMN IF NOT EXISTS committed_at TIMESTAMPTZ DEFAULT now();"))
-        conn.execute(text("ALTER TABLE commits ADD COLUMN IF NOT EXISTS rows_committed INT NOT NULL DEFAULT 0;"))
-        conn.execute(text("ALTER TABLE commits ADD COLUMN IF NOT EXISTS accuracy NUMERIC;"))
-        conn.execute(text("ALTER TABLE commits ADD COLUMN IF NOT EXISTS notes TEXT;"))
-
-        # ---------------------------
-        # 7) Committed Transactions
-        # ---------------------------
-        conn.execute(text("""
-        CREATE TABLE IF NOT EXISTS transactions_committed (
-            id SERIAL PRIMARY KEY,
-            commit_id INT NOT NULL REFERENCES commits(id) ON DELETE CASCADE,
-            client_id INT NOT NULL REFERENCES clients(id) ON DELETE CASCADE,
-            bank_id INT NOT NULL REFERENCES banks(id) ON DELETE CASCADE,
+            id BIGSERIAL PRIMARY KEY,
+            client_id BIGINT NOT NULL REFERENCES clients(id) ON DELETE CASCADE,
+            bank_id BIGINT NOT NULL REFERENCES banks(id) ON DELETE CASCADE,
             period TEXT NOT NULL,
+            committed_by TEXT,
+            rows_committed INT NOT NULL DEFAULT 0,
+            accuracy NUMERIC(6,4),
+            created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+        );
+        """)
 
+        _do(conn, """
+        CREATE INDEX IF NOT EXISTS idx_commits_lookup
+        ON commits (client_id, bank_id, period);
+        """)
+
+        # --- transactions_committed
+        _do(conn, """
+        CREATE TABLE IF NOT EXISTS transactions_committed (
+            id BIGSERIAL PRIMARY KEY,
+            commit_id BIGINT NOT NULL REFERENCES commits(id) ON DELETE CASCADE,
+            client_id BIGINT NOT NULL REFERENCES clients(id) ON DELETE CASCADE,
+            bank_id BIGINT NOT NULL REFERENCES banks(id) ON DELETE CASCADE,
+            period TEXT NOT NULL,
             tx_date DATE NOT NULL,
             description TEXT NOT NULL,
-            debit NUMERIC,
-            credit NUMERIC,
-            balance NUMERIC,
-
+            debit NUMERIC(18,2) DEFAULT 0,
+            credit NUMERIC(18,2) DEFAULT 0,
+            balance NUMERIC(18,2),
             category TEXT NOT NULL,
             vendor TEXT,
-
-            created_at TIMESTAMPTZ DEFAULT now()
+            suggested_category TEXT,
+            suggested_vendor TEXT,
+            confidence NUMERIC(5,4),
+            reason TEXT,
+            created_at TIMESTAMPTZ NOT NULL DEFAULT now()
         );
-        """))
+        """)
 
-        # Upgrade-safe: these were missing in your DB earlier
-        conn.execute(text("ALTER TABLE transactions_committed ADD COLUMN IF NOT EXISTS suggested_category TEXT;"))
-        conn.execute(text("ALTER TABLE transactions_committed ADD COLUMN IF NOT EXISTS suggested_vendor TEXT;"))
-        conn.execute(text("ALTER TABLE transactions_committed ADD COLUMN IF NOT EXISTS confidence NUMERIC;"))
-        conn.execute(text("ALTER TABLE transactions_committed ADD COLUMN IF NOT EXISTS reason TEXT;"))
+        _do(conn, """
+        CREATE INDEX IF NOT EXISTS idx_committed_lookup
+        ON transactions_committed (client_id, bank_id, period);
+        """)
 
-        conn.execute(text("""
-        CREATE INDEX IF NOT EXISTS idx_committed_client_bank_period
-        ON transactions_committed(client_id, bank_id, period);
-        """))
+        # --- vendor_memory
+        _do(conn, """
+        CREATE TABLE IF NOT EXISTS vendor_memory (
+            id BIGSERIAL PRIMARY KEY,
+            client_id BIGINT NOT NULL REFERENCES clients(id) ON DELETE CASCADE,
+            vendor_name TEXT NOT NULL,
+            category_name TEXT NOT NULL,
+            confidence NUMERIC(6,4) NOT NULL DEFAULT 0.70,
+            times_used INT NOT NULL DEFAULT 1,
+            updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+        );
+        """)
 
-        # ---------------------------
-        # 8) Backfill draft_batches (safe)
-        # ---------------------------
-        conn.execute(text("""
-        INSERT INTO draft_batches (client_id, bank_id, period, status)
-        SELECT DISTINCT client_id, bank_id, period, 'Imported'
-        FROM transactions_draft
-        ON CONFLICT (client_id, bank_id, period) DO NOTHING;
-        """))
+        # Unique (client + vendor)
+        _do(conn, """
+        DO $$
+        BEGIN
+            IF NOT EXISTS (
+                SELECT 1 FROM pg_constraint WHERE conname = 'vendor_memory_client_vendor_uniq'
+            ) THEN
+                ALTER TABLE public.vendor_memory
+                ADD CONSTRAINT vendor_memory_client_vendor_uniq
+                UNIQUE (client_id, vendor_name);
+            END IF;
+        END $$;
+        """)
 
-    return "DB schema initialized + migrated (tables created/verified + columns ensured)."
+        # --- keyword_model (IMPORTANT: uses column name 'category' in your current DB)
+        _do(conn, """
+        CREATE TABLE IF NOT EXISTS keyword_model (
+            id BIGSERIAL PRIMARY KEY,
+            client_id BIGINT NOT NULL REFERENCES clients(id) ON DELETE CASCADE,
+            token TEXT NOT NULL,
+            category TEXT NOT NULL,
+            weight NUMERIC(10,4) NOT NULL DEFAULT 0,
+            times_used INT NOT NULL DEFAULT 0
+        );
+        """)
+
+        # Unique (client + token + category)
+        _do(conn, """
+        DO $$
+        BEGIN
+            IF NOT EXISTS (
+                SELECT 1 FROM pg_constraint WHERE conname = 'keyword_model_client_token_cat_uniq'
+            ) THEN
+                ALTER TABLE public.keyword_model
+                ADD CONSTRAINT keyword_model_client_token_cat_uniq
+                UNIQUE (client_id, token, category);
+            END IF;
+        END $$;
+        """)
+
+        # --- migrations for older DBs (safe adds)
+        _do(conn, "ALTER TABLE public.commits ADD COLUMN IF NOT EXISTS committed_by TEXT;")
+        _do(conn, "ALTER TABLE public.transactions_committed ADD COLUMN IF NOT EXISTS suggested_category TEXT;")
+        _do(conn, "ALTER TABLE public.transactions_committed ADD COLUMN IF NOT EXISTS suggested_vendor TEXT;")
+        _do(conn, "ALTER TABLE public.transactions_committed ADD COLUMN IF NOT EXISTS confidence NUMERIC(5,4);")
+        _do(conn, "ALTER TABLE public.transactions_committed ADD COLUMN IF NOT EXISTS reason TEXT;")
+
+        _do(conn, "ALTER TABLE public.keyword_model ADD COLUMN IF NOT EXISTS times_used INT NOT NULL DEFAULT 0;")
+
+    return True
