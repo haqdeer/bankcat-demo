@@ -182,6 +182,10 @@ def init_db() -> str:
         CREATE INDEX IF NOT EXISTS idx_committed_client_bank_period
         ON transactions_committed(client_id, bank_id, period);
         """))
+        conn.execute(text("ALTER TABLE transactions_committed ADD COLUMN IF NOT EXISTS suggested_category TEXT;"))
+        conn.execute(text("ALTER TABLE transactions_committed ADD COLUMN IF NOT EXISTS suggested_vendor TEXT;"))
+        conn.execute(text("ALTER TABLE transactions_committed ADD COLUMN IF NOT EXISTS confidence NUMERIC;"))
+        conn.execute(text("ALTER TABLE transactions_committed ADD COLUMN IF NOT EXISTS reason TEXT;"))
 
         # ---------------------------
         # 7) Backfill draft_batches from existing drafts (one-time safe)
