@@ -70,11 +70,10 @@ def _tokenize(desc: str):
 def _upsert_keyword_weight(client_id: int, token: str, category: str, delta: float):
     # Requires UNIQUE (client_id, token, category_name)
     _exec("""
-        INSERT INTO keyword_model(client_id, token, category_name, weight)
-        VALUES (:cid, :t, :c, :w)
-        ON CONFLICT (client_id, token, category_name)
-        DO UPDATE SET weight = keyword_model.weight + EXCLUDED.weight,
-                      updated_at = now();
+      INSERT INTO keyword_model(client_id, token, category, weight)
+VALUES (:cid, :t, :c, :w)
+ON CONFLICT (client_id, token, category)
+DO UPDATE SET weight = keyword_model.weight + EXCLUDED.weight;
     """, {"cid": client_id, "t": token, "c": category, "w": delta})
 
 
