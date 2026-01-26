@@ -1,15 +1,19 @@
+# src/schema.py
 from sqlalchemy import text
 from src.db import get_engine
 
+
 def init_db() -> str:
     """
-    Create/verify tables + ensure required columns exist.
+    Create/verify tables + add missing columns safely (upgrade-safe).
     Safe to run multiple times.
     """
     engine = get_engine()
 
     with engine.begin() as conn:
-        # ---- Core masters ----
+        # ---------------------------
+        # 1) Masters
+        # ---------------------------
         conn.execute(text("""
         CREATE TABLE IF NOT EXISTS clients (
             id SERIAL PRIMARY KEY,
@@ -21,12 +25,6 @@ def init_db() -> str:
             created_at TIMESTAMPTZ DEFAULT now()
         );
         """))
-        # Ensure commits table has required columns (upgrade-safe)
-        conn.execute(text("ALTER TABLE commits ADD COLUMN IF NOT EXISTS committed_by TEXT;"))
-        conn.execute(text("ALTER TABLE commits ADD COLUMN IF NOT EXISTS committed_at TIMESTAMPTZ DEFAULT now();"))
-        conn.execute(text("ALTER TABLE commits ADD COLUMN IF NOT EXISTS rows_committed INT NOT NULL DEFAULT 0;"))
-        conn.execute(text("ALTER TABLE commits ADD COLUMN IF NOT EXISTS accuracy NUMERIC;"))
-        conn.execute(text("ALTER TABLE commits ADD COLUMN IF NOT EXISTS notes TEXT;"))
 
         conn.execute(text("""
         CREATE TABLE IF NOT EXISTS banks (
@@ -55,7 +53,9 @@ def init_db() -> str:
         );
         """))
 
-        # ---- Draft batches (Status) ----
+        # ---------------------------
+        # 2) Draft Batches (status)
+        # ---------------------------
         conn.execute(text("""
         CREATE TABLE IF NOT EXISTS draft_batches (
             id SERIAL PRIMARY KEY,
@@ -69,13 +69,16 @@ def init_db() -> str:
         );
         """))
 
-        # ---- Draft transactions ----
+        # ---------------------------
+        # 3) Draft Transactions
+        # ---------------------------
         conn.execute(text("""
         CREATE TABLE IF NOT EXISTS transactions_draft (
             id SERIAL PRIMARY KEY,
             client_id INT NOT NULL REFERENCES clients(id) ON DELETE CASCADE,
             bank_id INT NOT NULL REFERENCES banks(id) ON DELETE CASCADE,
             period TEXT NOT NULL,
+
             tx_date DATE NOT NULL,
             description TEXT NOT NULL,
             debit NUMERIC,
@@ -99,7 +102,9 @@ def init_db() -> str:
         ON transactions_draft(client_id, bank_id, period);
         """))
 
-        # ---- Vendor memory (learning) ----
+        # ---------------------------
+        # 4) Learning Tables
+        # ---------------------------
         conn.execute(text("""
         CREATE TABLE IF NOT EXISTS vendor_memory (
             id SERIAL PRIMARY KEY,
@@ -113,7 +118,6 @@ def init_db() -> str:
         );
         """))
 
-        # ---- Keyword model (learning) ----
         conn.execute(text("""
         CREATE TABLE IF NOT EXISTS keyword_model (
             id SERIAL PRIMARY KEY,
@@ -126,22 +130,25 @@ def init_db() -> str:
         );
         """))
 
-        # ---- Commits ----
+        # ---------------------------
+        # 5) Commits + Committed Transactions
+        # ---------------------------
         conn.execute(text("""
         CREATE TABLE IF NOT EXISTS commits (
             id SERIAL PRIMARY KEY,
             client_id INT NOT NULL REFERENCES clients(id) ON DELETE CASCADE,
             bank_id INT NOT NULL REFERENCES banks(id) ON DELETE CASCADE,
-            period TEXT NOT NULL,
-            committed_by TEXT,
-            committed_at TIMESTAMPTZ DEFAULT now(),
-            rows_committed INT NOT NULL DEFAULT 0,
-            accuracy NUMERIC,
-            notes TEXT
+            period TEXT NOT NULL
         );
         """))
 
-        # ---- Committed transactions ----
+        # ✅ Upgrade-safe: ensure commits columns exist (THIS fixes your error)
+        conn.execute(text("ALTER TABLE commits ADD COLUMN IF NOT EXISTS committed_by TEXT;"))
+        conn.execute(text("ALTER TABLE commits ADD COLUMN IF NOT EXISTS committed_at TIMESTAMPTZ DEFAULT now();"))
+        conn.execute(text("ALTER TABLE commits ADD COLUMN IF NOT EXISTS rows_committed INT NOT NULL DEFAULT 0;"))
+        conn.execute(text("ALTER TABLE commits ADD COLUMN IF NOT EXISTS accuracy NUMERIC;"))
+        conn.execute(text("ALTER TABLE commits ADD COLUMN IF NOT EXISTS notes TEXT;"))
+
         conn.execute(text("""
         CREATE TABLE IF NOT EXISTS transactions_committed (
             id SERIAL PRIMARY KEY,
@@ -168,7 +175,14 @@ def init_db() -> str:
         );
         """))
 
-        # ✅ IMPORTANT: Backfill draft_batches from existing transactions_draft
+        conn.execute(text("""
+        CREATE INDEX IF NOT EXISTS idx_committed_client_bank_period
+        ON transactions_committed(client_id, bank_id, period);
+        """))
+
+        # ---------------------------
+        # 6) Backfill draft_batches from existing drafts (one-time safe)
+        # ---------------------------
         conn.execute(text("""
         INSERT INTO draft_batches (client_id, bank_id, period, status)
         SELECT DISTINCT client_id, bank_id, period, 'Imported'
