@@ -1,3 +1,22 @@
+## 2026-01-23
+### What we built
+- Added Step-8 committed dashboard with bank/date/period filters, committed tables, P&L summary, and commit metrics.
+
+### Why
+- Provide reporting views over committed transactions for review and accuracy tracking.
+
+### Files changed
+- app.py
+- src/crud.py
+- docs/BUILD_LOG.md
+- docs/SOP.md
+
+### Tests done
+- Not run (requires a DB with committed data in Streamlit).
+
+### Result
+- Pending manual verification in the app UI.
+
 ### What we built
 - Added Edit + Disable/Enable + Safe Delete for Clients/Banks/Categories (soft-delete)
 ## 2026-01-21
