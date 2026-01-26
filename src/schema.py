@@ -5,7 +5,7 @@ from src.db import get_engine
 
 def init_db() -> str:
     """
-    Create/verify tables + add missing columns safely (upgrade-safe).
+    Create/verify tables + upgrade-safe migrations.
     Safe to run multiple times.
     """
     engine = get_engine()
@@ -54,7 +54,7 @@ def init_db() -> str:
         """))
 
         # ---------------------------
-        # 2) Draft Batches (status)
+        # 2) Draft Batches
         # ---------------------------
         conn.execute(text("""
         CREATE TABLE IF NOT EXISTS draft_batches (
@@ -103,7 +103,7 @@ def init_db() -> str:
         """))
 
         # ---------------------------
-        # 4) Learning Tables
+        # 4) Vendor Memory
         # ---------------------------
         conn.execute(text("""
         CREATE TABLE IF NOT EXISTS vendor_memory (
@@ -118,6 +118,9 @@ def init_db() -> str:
         );
         """))
 
+        # ---------------------------
+        # 5) Keyword Model (IMPORTANT for commit learning)
+        # ---------------------------
         conn.execute(text("""
         CREATE TABLE IF NOT EXISTS keyword_model (
             id SERIAL PRIMARY KEY,
@@ -130,8 +133,12 @@ def init_db() -> str:
         );
         """))
 
+        # Upgrade-safe ensures (even if table existed before)
+        conn.execute(text("ALTER TABLE keyword_model ADD COLUMN IF NOT EXISTS weight NUMERIC NOT NULL DEFAULT 0;"))
+        conn.execute(text("ALTER TABLE keyword_model ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ DEFAULT now();"))
+
         # ---------------------------
-        # 5) Commits (create minimal, then ALTER columns)
+        # 6) Commits (create minimal + alter missing cols)
         # ---------------------------
         conn.execute(text("""
         CREATE TABLE IF NOT EXISTS commits (
@@ -142,7 +149,6 @@ def init_db() -> str:
         );
         """))
 
-        # ✅ Upgrade-safe: ensure commits columns exist (THIS fixes committed_by error)
         conn.execute(text("ALTER TABLE commits ADD COLUMN IF NOT EXISTS committed_by TEXT;"))
         conn.execute(text("ALTER TABLE commits ADD COLUMN IF NOT EXISTS committed_at TIMESTAMPTZ DEFAULT now();"))
         conn.execute(text("ALTER TABLE commits ADD COLUMN IF NOT EXISTS rows_committed INT NOT NULL DEFAULT 0;"))
@@ -150,7 +156,7 @@ def init_db() -> str:
         conn.execute(text("ALTER TABLE commits ADD COLUMN IF NOT EXISTS notes TEXT;"))
 
         # ---------------------------
-        # 6) Committed Transactions
+        # 7) Committed Transactions
         # ---------------------------
         conn.execute(text("""
         CREATE TABLE IF NOT EXISTS transactions_committed (
@@ -169,26 +175,23 @@ def init_db() -> str:
             category TEXT NOT NULL,
             vendor TEXT,
 
-            suggested_category TEXT,
-            suggested_vendor TEXT,
-            confidence NUMERIC,
-            reason TEXT,
-
             created_at TIMESTAMPTZ DEFAULT now()
         );
         """))
 
-        conn.execute(text("""
-        CREATE INDEX IF NOT EXISTS idx_committed_client_bank_period
-        ON transactions_committed(client_id, bank_id, period);
-        """))
+        # Upgrade-safe: these were missing in your DB earlier
         conn.execute(text("ALTER TABLE transactions_committed ADD COLUMN IF NOT EXISTS suggested_category TEXT;"))
         conn.execute(text("ALTER TABLE transactions_committed ADD COLUMN IF NOT EXISTS suggested_vendor TEXT;"))
         conn.execute(text("ALTER TABLE transactions_committed ADD COLUMN IF NOT EXISTS confidence NUMERIC;"))
         conn.execute(text("ALTER TABLE transactions_committed ADD COLUMN IF NOT EXISTS reason TEXT;"))
 
+        conn.execute(text("""
+        CREATE INDEX IF NOT EXISTS idx_committed_client_bank_period
+        ON transactions_committed(client_id, bank_id, period);
+        """))
+
         # ---------------------------
-        # 7) Backfill draft_batches from existing drafts (one-time safe)
+        # 8) Backfill draft_batches (safe)
         # ---------------------------
         conn.execute(text("""
         INSERT INTO draft_batches (client_id, bank_id, period, status)
