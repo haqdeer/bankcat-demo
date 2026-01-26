@@ -21,6 +21,12 @@ def init_db() -> str:
             created_at TIMESTAMPTZ DEFAULT now()
         );
         """))
+        # Ensure commits table has required columns (upgrade-safe)
+        conn.execute(text("ALTER TABLE commits ADD COLUMN IF NOT EXISTS committed_by TEXT;"))
+        conn.execute(text("ALTER TABLE commits ADD COLUMN IF NOT EXISTS committed_at TIMESTAMPTZ DEFAULT now();"))
+        conn.execute(text("ALTER TABLE commits ADD COLUMN IF NOT EXISTS rows_committed INT NOT NULL DEFAULT 0;"))
+        conn.execute(text("ALTER TABLE commits ADD COLUMN IF NOT EXISTS accuracy NUMERIC;"))
+        conn.execute(text("ALTER TABLE commits ADD COLUMN IF NOT EXISTS notes TEXT;"))
 
         conn.execute(text("""
         CREATE TABLE IF NOT EXISTS banks (
