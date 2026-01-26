@@ -507,13 +507,14 @@ else:
 st.markdown("### Committed Sample (this bank + period)")
 try:
     sample = crud.committed_sample(client_id, bank_id, period, limit=200)
-    st.dataframe(sample, use_container_width=True)
-except Exception as e:
-    st.info("No committed data yet (or table not ready). Run a Commit first, or re-run Initialize/Migrate DB.")
-if sample:
-    st.dataframe(pd.DataFrame(sample), use_container_width=True, hide_index=True)
-else:
-    st.info("No committed rows yet for this period.")
+
+    if sample:
+        st.dataframe(pd.DataFrame(sample), use_container_width=True, hide_index=True)
+    else:
+        st.info("No committed rows yet for this period.")
+
+except Exception:
+    st.info("No committed data yet (Commit not done or table not ready).")
 
 st.divider()
 
