@@ -350,10 +350,17 @@ def commit_period(client_id: int, bank_id: int, period: str, committed_by: Optio
             matched += 1
     accuracy = round(matched / total, 4) if total else None
 
+    # Deactivate any prior commits for the same client+bank+period
+    _exec("""
+        UPDATE commits
+        SET is_active=FALSE
+        WHERE client_id=:cid AND bank_id=:bid AND period=:p AND is_active=TRUE;
+    """, {"cid": client_id, "bid": bank_id, "p": period})
+
     # Insert commit row
     cm = _q("""
-        INSERT INTO commits(client_id, bank_id, period, committed_by, rows_committed, accuracy)
-        VALUES (:cid,:bid,:p,:by,:n,:acc)
+        INSERT INTO commits(client_id, bank_id, period, committed_by, rows_committed, accuracy, is_active)
+        VALUES (:cid,:bid,:p,:by,:n,:acc,TRUE)
         RETURNING id;
     """, {"cid": client_id, "bid": bank_id, "p": period, "by": committed_by, "n": total, "acc": accuracy})
     commit_id = int(cm[0]["id"])
@@ -406,15 +413,16 @@ def commit_period(client_id: int, bank_id: int, period: str, committed_by: Optio
 
 # ---------------- Committed Reporting ----------------
 def list_committed_periods(client_id: int, bank_id: Optional[int] = None) -> List[str]:
-    conditions = ["client_id=:cid"]
+    conditions = ["tc.client_id=:cid", "c.is_active=TRUE"]
     params: Dict[str, Any] = {"cid": client_id}
     if bank_id is not None:
-        conditions.append("bank_id=:bid")
+        conditions.append("tc.bank_id=:bid")
         params["bid"] = bank_id
 
     sql = f"""
         SELECT DISTINCT period
-        FROM transactions_committed
+        FROM transactions_committed tc
+        JOIN commits c ON c.id = tc.commit_id
         WHERE {" AND ".join(conditions)}
         ORDER BY period DESC;
     """
@@ -429,7 +437,7 @@ def list_committed_transactions(
     date_to: Optional[str] = None,
     period: Optional[str] = None,
 ) -> List[dict]:
-    conditions = ["tc.client_id=:cid"]
+    conditions = ["tc.client_id=:cid", "c.is_active=TRUE"]
     params: Dict[str, Any] = {"cid": client_id}
     if bank_id is not None:
         conditions.append("tc.bank_id=:bid")
@@ -449,6 +457,7 @@ def list_committed_transactions(
                tc.category, tc.vendor, tc.confidence, tc.reason,
                b.bank_name, tc.period
         FROM transactions_committed tc
+        JOIN commits c ON c.id = tc.commit_id
         JOIN banks b ON b.id = tc.bank_id
         WHERE {" AND ".join(conditions)}
         ORDER BY tc.tx_date ASC, tc.id ASC;
@@ -463,7 +472,7 @@ def list_committed_pl_summary(
     date_to: Optional[str] = None,
     period: Optional[str] = None,
 ) -> List[dict]:
-    conditions = ["tc.client_id=:cid"]
+    conditions = ["tc.client_id=:cid", "c.is_active=TRUE"]
     params: Dict[str, Any] = {"cid": client_id}
     if bank_id is not None:
         conditions.append("tc.bank_id=:bid")
@@ -485,6 +494,7 @@ def list_committed_pl_summary(
                SUM(tc.credit) AS total_credit,
                SUM(tc.credit) - SUM(tc.debit) AS net_amount
         FROM transactions_committed tc
+        JOIN commits c ON c.id = tc.commit_id
         LEFT JOIN categories cat
             ON cat.client_id = tc.client_id
            AND cat.category_name = tc.category
@@ -502,7 +512,7 @@ def list_commit_metrics(
     date_to: Optional[str] = None,
     period: Optional[str] = None,
 ) -> List[dict]:
-    conditions = ["c.client_id=:cid"]
+    conditions = ["c.client_id=:cid", "c.is_active=TRUE"]
     params: Dict[str, Any] = {"cid": client_id}
     if bank_id is not None:
         conditions.append("c.bank_id=:bid")
