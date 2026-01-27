@@ -1,5 +1,22 @@
 ## 2026-01-26
 ### What we built
+- Reworked navigation into standalone pages with inline setup forms and safer edit prefill logic.
+
+### Why
+- Fix navigation reliability issues and remove modal/dialog errors while keeping workflows intact.
+
+### Files changed
+- app.py
+- docs/BUILD_LOG.md
+
+### Tests done
+- Not run (UI change only).
+
+### Result
+- Pending manual verification.
+
+## 2026-01-26
+### What we built
 - Updated sidebar navigation with Settings subpages and inline setup forms to avoid dialog errors.
 
 ### Why

@@ -130,8 +130,10 @@ st.markdown(
 
 if "nav_page" not in st.session_state:
     st.session_state.nav_page = "Home"
-if "nav_settings_page" not in st.session_state:
-    st.session_state.nav_settings_page = None
+if "companies_subpage" not in st.session_state:
+    st.session_state.companies_subpage = "List"
+if "setup_subpage" not in st.session_state:
+    st.session_state.setup_subpage = "Banks"
 if "active_client_id" not in st.session_state:
     st.session_state.active_client_id = None
 if "active_client_name" not in st.session_state:
@@ -162,25 +164,9 @@ if "setup_category_edit_id" not in st.session_state:
 
 with st.sidebar:
     st.markdown("### Navigation")
-    for page in ["Home", "Dashboard", "Reports", "Categorisation", "Settings"]:
+    for page in ["Home", "Reports", "Dashboard", "Companies", "Setup", "Categorisation", "Settings"]:
         if st.button(page, use_container_width=True, key=f"nav_{page}"):
             st.session_state.nav_page = page
-            if page != "Settings":
-                st.session_state.nav_settings_page = None
-
-    if st.session_state.nav_page == "Settings":
-        with st.expander("Companies", expanded=True):
-            if st.button("List", use_container_width=True, key="companies_list"):
-                st.session_state.nav_settings_page = "Companies:List"
-            if st.button("Change Company", use_container_width=True, key="companies_change"):
-                st.session_state.nav_settings_page = "Companies:Change"
-            if st.button("Add Company", use_container_width=True, key="companies_add"):
-                st.session_state.nav_settings_page = "Companies:Add"
-        with st.expander("Setup", expanded=True):
-            if st.button("Banks", use_container_width=True, key="setup_banks"):
-                st.session_state.nav_settings_page = "Setup:Banks"
-            if st.button("Categories", use_container_width=True, key="setup_categories"):
-                st.session_state.nav_settings_page = "Setup:Categories"
 
 
 def _require_active_client() -> int | None:
@@ -474,6 +460,23 @@ def render_companies_add():
                 st.error(f"Create client failed ❌\n\n{_format_exc(e)}")
 
 
+def render_companies():
+    st.header("Companies")
+    st.radio(
+        "Companies navigation",
+        ["List", "Change Company", "Add Company"],
+        key="companies_subpage",
+        label_visibility="collapsed",
+        horizontal=True,
+    )
+    if st.session_state.companies_subpage == "List":
+        render_companies_list()
+    elif st.session_state.companies_subpage == "Change Company":
+        render_companies_change()
+    else:
+        render_companies_add()
+
+
 def render_setup_banks():
     st.subheader("Banks")
     client_id = _require_active_client()
@@ -498,10 +501,11 @@ def render_setup_banks():
                 row[0].write(bank.get("bank_name"))
                 row[1].write(bank.get("account_type"))
                 row[2].write(bank.get("currency"))
-                row[3].write(bank.get("account_number_masked"))
+                row[3].write(bank.get("account_number_masked") or "")
                 if row[4].button("✏️", key=f"edit_bank_{bank['id']}"):
                     st.session_state.setup_banks_mode = "edit"
                     st.session_state.setup_bank_edit_id = bank["id"]
+                    st.rerun()
         return
 
     if st.session_state.setup_banks_mode == "add":
@@ -650,6 +654,7 @@ def render_setup_categories():
                 if row[4].button("✏️", key=f"edit_cat_{cat['id']}"):
                     st.session_state.setup_categories_mode = "edit"
                     st.session_state.setup_category_edit_id = cat["id"]
+                    st.rerun()
         return
 
     if st.session_state.setup_categories_mode == "add":
@@ -685,10 +690,26 @@ def render_setup_categories():
             st.session_state.setup_categories_mode = "list"
             return
         st.markdown("#### Edit Category")
+        allowed_natures = ["Any", "Debit", "Credit"]
+        raw_nature = (edit_cat.get("nature") or "Any").strip()
+        if raw_nature.lower() in {"dr", "debit"}:
+            current_nature = "Debit"
+        elif raw_nature.lower() in {"cr", "credit"}:
+            current_nature = "Credit"
+        else:
+            current_nature = "Any"
+        if current_nature not in allowed_natures:
+            current_nature = "Any"
         cat_name = st.text_input(
             "Category Name *",
             value=edit_cat.get("category_name") or "",
             key="edit_cat_name",
+        )
+        st.text_input(
+            "Category Code",
+            value=edit_cat.get("category_code") or "",
+            disabled=True,
+            key="edit_cat_code",
         )
         cat_type = st.selectbox(
             "Type *",
@@ -697,9 +718,9 @@ def render_setup_categories():
             key="edit_cat_type",
         )
         cat_nature = st.selectbox(
-            "Nature (Dr/Cr/Any)",
-            ["Any", "Dr", "Cr"],
-            index=["Any", "Dr", "Cr"].index(edit_cat.get("nature") or "Any"),
+            "Nature (Debit/Credit/Any)",
+            allowed_natures,
+            index=allowed_natures.index(current_nature),
             key="edit_cat_nature",
         )
         is_active = st.checkbox(
@@ -1113,20 +1134,19 @@ def render_settings():
             st.dataframe(pd.DataFrame(results), use_container_width=True, hide_index=True)
 
 
-def render_settings_subpages():
-    subpage = st.session_state.nav_settings_page
-    if subpage == "Companies:List":
-        render_companies_list()
-    elif subpage == "Companies:Change":
-        render_companies_change()
-    elif subpage == "Companies:Add":
-        render_companies_add()
-    elif subpage == "Setup:Banks":
+def render_setup():
+    st.header("Setup")
+    st.radio(
+        "Setup navigation",
+        ["Banks", "Categories"],
+        key="setup_subpage",
+        label_visibility="collapsed",
+        horizontal=True,
+    )
+    if st.session_state.setup_subpage == "Banks":
         render_setup_banks()
-    elif subpage == "Setup:Categories":
-        render_setup_categories()
     else:
-        st.info("Select a section under Settings to continue.")
+        render_setup_categories()
 
 
 # ---------------- Page Rendering ----------------
@@ -1137,8 +1157,11 @@ elif page == "Dashboard":
     render_dashboard()
 elif page == "Reports":
     render_reports()
+elif page == "Companies":
+    render_companies()
+elif page == "Setup":
+    render_setup()
 elif page == "Categorisation":
     render_categorisation()
 elif page == "Settings":
     render_settings()
-    render_settings_subpages()
