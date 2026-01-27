@@ -1,5 +1,23 @@
 ## 2026-01-26
 ### What we built
+- Stabilized navigation, inline Setup/Companies forms, and schema verification expectations.
+
+### Why
+- Resolve form reliability issues, remove dialog errors, and align schema checks with DB reality.
+
+### Files changed
+- app.py
+- docs/DB_SCHEMA_TRUTH.md
+- docs/BUILD_LOG.md
+
+### Tests done
+- Not run (UI change only).
+
+### Result
+- Pending manual verification.
+
+## 2026-01-26
+### What we built
 - Reworked navigation into standalone pages with inline setup forms and safer edit prefill logic.
 
 ### Why

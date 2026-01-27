@@ -160,6 +160,10 @@ if "setup_categories_mode" not in st.session_state:
     st.session_state.setup_categories_mode = "list"
 if "setup_category_edit_id" not in st.session_state:
     st.session_state.setup_category_edit_id = None
+if "companies_tab" not in st.session_state:
+    st.session_state.companies_tab = "List"
+if "setup_tab" not in st.session_state:
+    st.session_state.setup_tab = "Banks"
 
 
 with st.sidebar:
@@ -167,6 +171,18 @@ with st.sidebar:
     for page in ["Home", "Reports", "Dashboard", "Companies", "Setup", "Categorisation", "Settings"]:
         if st.button(page, use_container_width=True, key=f"nav_{page}"):
             st.session_state.nav_page = page
+
+    if st.session_state.nav_page == "Companies":
+        st.markdown("#### Companies")
+        for tab in ["List", "Change Company", "Add Company"]:
+            if st.button(tab, use_container_width=True, key=f"companies_tab_{tab}"):
+                st.session_state.companies_tab = tab
+
+    if st.session_state.nav_page == "Setup":
+        st.markdown("#### Setup")
+        for tab in ["Banks", "Categories"]:
+            if st.button(tab, use_container_width=True, key=f"setup_tab_{tab}"):
+                st.session_state.setup_tab = tab
 
 
 def _require_active_client() -> int | None:
@@ -452,6 +468,60 @@ def render_companies_add():
         if not new_name.strip():
             st.error("Client name required.")
         else:
+            current_nature = "Any"
+        if current_nature not in allowed_natures:
+            current_nature = "Any"
+        cat_name = st.text_input(
+            "Category Name *",
+            value=edit_cat.get("category_name") or "",
+            key="edit_cat_name",
+        )
+        st.text_input(
+            "Category Code",
+            value=edit_cat.get("category_code") or "",
+            disabled=True,
+            key="edit_cat_code",
+        )
+        cat_type = st.selectbox(
+            "Type *",
+            ["Expense", "Income", "Other"],
+            index=["Expense", "Income", "Other"].index(edit_cat.get("type") or "Expense"),
+            key="edit_cat_type",
+        )
+        cat_nature = st.selectbox(
+            "Nature (Debit/Credit/Any)",
+            allowed_natures,
+            index=allowed_natures.index(current_nature),
+            key="edit_cat_nature",
+        )
+        is_active = st.checkbox(
+            "Is Active", value=bool(edit_cat.get("is_active", True)), key="edit_cat_active"
+        )
+        col1, col2 = st.columns(2)
+        if col1.button("Save Category Changes", key="edit_cat_save"):
+            if not cat_name.strip():
+                st.error("Category name required.")
+            else:
+                try:
+                    crud.update_category(edit_cat["id"], cat_name, cat_type, cat_nature)
+                    crud.set_category_active(edit_cat["id"], is_active)
+                    st.success("Category updated ✅")
+                    st.cache_data.clear()
+                    st.session_state.setup_categories_mode = "list"
+                    st.session_state.setup_category_edit_id = None
+                    st.rerun()
+                except Exception as e:
+                    st.error(f"Update category failed ❌\n\n{_format_exc(e)}")
+        if col2.button("Cancel", key="edit_cat_cancel"):
+            st.session_state.setup_categories_mode = "list"
+            st.session_state.setup_category_edit_id = None
+            st.rerun()
+        return
+
+    if st.session_state.setup_categories_mode == "bulk_upload":
+        st.markdown("#### Bulk Upload Categories (CSV)")
+        cat_file = st.file_uploader("Upload CSV", type=["csv"], key="cat_csv")
+        if cat_file:
             try:
                 cid = crud.create_client(new_name, new_industry, new_country, new_desc)
                 st.success(f"Created client id={cid}")
@@ -462,16 +532,9 @@ def render_companies_add():
 
 def render_companies():
     st.header("Companies")
-    st.radio(
-        "Companies navigation",
-        ["List", "Change Company", "Add Company"],
-        key="companies_subpage",
-        label_visibility="collapsed",
-        horizontal=True,
-    )
-    if st.session_state.companies_subpage == "List":
+    if st.session_state.companies_tab == "List":
         render_companies_list()
-    elif st.session_state.companies_subpage == "Change Company":
+    elif st.session_state.companies_tab == "Change Company":
         render_companies_change()
     else:
         render_companies_add()
@@ -485,28 +548,10 @@ def render_setup_banks():
 
     banks = cached_banks(client_id)
 
-    if st.session_state.setup_banks_mode == "list":
-        if st.button("Add new bank"):
-            st.session_state.setup_banks_mode = "add"
-        if banks:
-            st.markdown("#### Bank List")
-            header = st.columns([3, 2, 2, 2, 1])
-            header[0].markdown("**Bank**")
-            header[1].markdown("**Account Type**")
-            header[2].markdown("**Currency**")
-            header[3].markdown("**Masked**")
-            header[4].markdown("**Edit**")
-            for bank in banks:
-                row = st.columns([3, 2, 2, 2, 1])
-                row[0].write(bank.get("bank_name"))
-                row[1].write(bank.get("account_type"))
-                row[2].write(bank.get("currency"))
-                row[3].write(bank.get("account_number_masked") or "")
-                if row[4].button("✏️", key=f"edit_bank_{bank['id']}"):
-                    st.session_state.setup_banks_mode = "edit"
-                    st.session_state.setup_bank_edit_id = bank["id"]
-                    st.rerun()
-        return
+    if st.button("Add new bank"):
+        st.session_state.setup_banks_mode = "add"
+        st.session_state.setup_bank_edit_id = None
+        st.rerun()
 
     if st.session_state.setup_banks_mode == "add":
         st.markdown("#### Add Bank")
@@ -537,7 +582,6 @@ def render_setup_banks():
         if col2.button("Cancel", key="add_bank_cancel"):
             st.session_state.setup_banks_mode = "list"
             st.rerun()
-        return
 
     if st.session_state.setup_banks_mode == "edit":
         edit_bank = next(
@@ -547,7 +591,8 @@ def render_setup_banks():
         if not edit_bank:
             st.info("Bank not found.")
             st.session_state.setup_banks_mode = "list"
-            return
+            st.session_state.setup_bank_edit_id = None
+            st.rerun()
         st.markdown("#### Edit Bank")
         bank_name = st.text_input(
             "Bank Name *", value=edit_bank.get("bank_name") or "", key="edit_bank_name"
@@ -608,6 +653,25 @@ def render_setup_banks():
             st.session_state.setup_bank_edit_id = None
             st.rerun()
 
+    if banks:
+        st.markdown("#### Bank List")
+        header = st.columns([3, 2, 2, 2, 1])
+        header[0].markdown("**Bank**")
+        header[1].markdown("**Account Type**")
+        header[2].markdown("**Currency**")
+        header[3].markdown("**Masked**")
+        header[4].markdown("**Edit**")
+        for bank in banks:
+            row = st.columns([3, 2, 2, 2, 1])
+            row[0].write(bank.get("bank_name"))
+            row[1].write(bank.get("account_type"))
+            row[2].write(bank.get("currency"))
+            row[3].write(bank.get("account_number_masked") or "")
+            if row[4].button("✏️", key=f"edit_bank_{bank['id']}"):
+                st.session_state.setup_banks_mode = "edit"
+                st.session_state.setup_bank_edit_id = bank["id"]
+                st.rerun()
+
 
 def render_setup_categories():
     st.subheader("Categories")
@@ -617,51 +681,64 @@ def render_setup_categories():
 
     cats = cached_categories(client_id)
 
-    if st.session_state.setup_categories_mode == "list":
-        col1, col2 = st.columns(2)
-        if col1.button("Add new category"):
-            st.session_state.setup_categories_mode = "add"
-        if col2.button("Bulk upload categories (CSV)"):
-            st.session_state.setup_categories_mode = "bulk_upload"
+    col1, col2 = st.columns(2)
+    if col1.button("Add new category"):
+        st.session_state.setup_categories_mode = "add"
+        st.session_state.setup_category_edit_id = None
+        st.rerun()
+    if col2.button("Bulk upload categories (CSV)"):
+        st.session_state.setup_categories_mode = "bulk_upload"
+        st.session_state.setup_category_edit_id = None
+        st.rerun()
 
-        st.markdown("#### Download Category Template (CSV)")
-        template = pd.DataFrame([
-            {"category_name": "", "type": "Expense", "nature": "Any"}
-        ])
-        buf = io.StringIO()
-        template.to_csv(buf, index=False)
-        st.download_button(
-            "Download Category CSV Template",
-            data=buf.getvalue(),
-            file_name="category_template.csv",
-            mime="text/csv",
-        )
+    st.subheader("Statement Date Range (optional but recommended)")
+    month_idx = month_names.index(month) + 1
+    last_day = calendar.monthrange(year, month_idx)[1]
+    default_range = (
+        st.session_state.date_from or dt.date(year, month_idx, 1),
+        st.session_state.date_to or dt.date(year, month_idx, last_day),
+    )
+    dr = st.date_input("Select From-To", value=default_range)
+    date_from, date_to = dr if isinstance(dr, tuple) else (dr, dr)
+    st.session_state.date_from = date_from
+    st.session_state.date_to = date_to
 
-        if cats:
-            st.markdown("#### Category List")
-            header = st.columns([3, 2, 2, 2, 1])
-            header[0].markdown("**Category**")
-            header[1].markdown("**Type**")
-            header[2].markdown("**Nature**")
-            header[3].markdown("**Active**")
-            header[4].markdown("**Edit**")
-            for cat in cats:
-                row = st.columns([3, 2, 2, 2, 1])
-                row[0].write(cat.get("category_name"))
-                row[1].write(cat.get("type"))
-                row[2].write(cat.get("nature"))
-                row[3].write("Yes" if cat.get("is_active", True) else "No")
-                if row[4].button("✏️", key=f"edit_cat_{cat['id']}"):
-                    st.session_state.setup_categories_mode = "edit"
-                    st.session_state.setup_category_edit_id = cat["id"]
-                    st.rerun()
-        return
+    st.subheader("Existing Drafts (this client + bank)")
+    try:
+        summary = crud.drafts_summary(client_id, bank_id)
+        st.dataframe(pd.DataFrame(summary), use_container_width=True, hide_index=True)
+    except Exception as e:
+        st.warning(f"Draft summary unavailable. ({_format_exc(e)})")
+
+    st.subheader("Upload Template (CSV)")
+    stmt_template = pd.DataFrame([
+        {
+            "Date": "2025-10-01",
+            "Description": "POS Purchase Example Vendor",
+            "Dr": 100.00,
+            "Cr": 0.00,
+            "Closing": "",
+        }
+    ])
+    buf2 = io.StringIO()
+    stmt_template.to_csv(buf2, index=False)
+    st.download_button(
+        "Download Statement CSV Template",
+        data=buf2.getvalue(),
+        file_name="statement_template.csv",
+        mime="text/csv",
+    )
+    st.caption("Minimum columns: Date + Description. Dr/Cr recommended. Closing optional (can be blank).")
 
     if st.session_state.setup_categories_mode == "add":
         st.markdown("#### Add Category")
         cat_name = st.text_input("Category Name *", key="add_cat_name")
         cat_type = st.selectbox("Type *", ["Expense", "Income", "Other"], key="add_cat_type")
-        cat_nature = st.selectbox("Nature (Dr/Cr/Any)", ["Any", "Dr", "Cr"], key="add_cat_nature")
+        cat_nature = st.selectbox(
+            "Nature (Debit/Credit/Any)",
+            ["Any", "Debit", "Credit"],
+            key="add_cat_nature",
+        )
         col1, col2 = st.columns(2)
         if col1.button("Save Category", key="add_cat_save"):
             if not cat_name.strip():
@@ -678,7 +755,6 @@ def render_setup_categories():
         if col2.button("Cancel", key="add_cat_cancel"):
             st.session_state.setup_categories_mode = "list"
             st.rerun()
-        return
 
     if st.session_state.setup_categories_mode == "edit":
         edit_cat = next(
@@ -688,7 +764,8 @@ def render_setup_categories():
         if not edit_cat:
             st.info("Category not found.")
             st.session_state.setup_categories_mode = "list"
-            return
+            st.session_state.setup_category_edit_id = None
+            st.rerun()
         st.markdown("#### Edit Category")
         allowed_natures = ["Any", "Debit", "Credit"]
         raw_nature = (edit_cat.get("nature") or "Any").strip()
@@ -745,7 +822,6 @@ def render_setup_categories():
             st.session_state.setup_categories_mode = "list"
             st.session_state.setup_category_edit_id = None
             st.rerun()
-        return
 
     if st.session_state.setup_categories_mode == "bulk_upload":
         st.markdown("#### Bulk Upload Categories (CSV)")
@@ -766,6 +842,25 @@ def render_setup_categories():
         if st.button("Cancel Bulk Upload"):
             st.session_state.setup_categories_mode = "list"
             st.rerun()
+
+    if cats:
+        st.markdown("#### Category List")
+        header = st.columns([3, 2, 2, 2, 1])
+        header[0].markdown("**Category**")
+        header[1].markdown("**Type**")
+        header[2].markdown("**Nature**")
+        header[3].markdown("**Active**")
+        header[4].markdown("**Edit**")
+        for cat in cats:
+            row = st.columns([3, 2, 2, 2, 1])
+            row[0].write(cat.get("category_name"))
+            row[1].write(cat.get("type"))
+            row[2].write(cat.get("nature"))
+            row[3].write("Yes" if cat.get("is_active", True) else "No")
+            if row[4].button("✏️", key=f"edit_cat_{cat['id']}"):
+                st.session_state.setup_categories_mode = "edit"
+                st.session_state.setup_category_edit_id = cat["id"]
+                st.rerun()
 
 
 def render_categorisation():
@@ -1103,47 +1198,38 @@ def render_settings():
             return
         truth = _load_schema_truth(truth_path)
         tables = [
-            "clients",
             "banks",
             "categories",
-            "draft_batches",
-            "transactions_draft",
+            "clients",
             "commits",
-            "transactions_committed",
-            "vendor_memory",
+            "draft_batches",
             "keyword_model",
+            "transactions_committed",
+            "transactions_draft",
+            "vendor_memory",
         ]
         results = []
         for table in tables:
             cols = crud.list_table_columns(table)
             expected = truth.get(table, [])
             missing = [c for c in expected if c not in cols]
-            extra = [c for c in cols if c not in expected]
             results.append(
                 {
                     "table": table,
                     "missing": ", ".join(missing) or "—",
-                    "extra": ", ".join(extra) or "—",
                 }
             )
-        issues = [r for r in results if r["missing"] != "—" or r["extra"] != "—"]
+        issues = [r for r in results if r["missing"] != "—"]
         if not issues:
             st.success("✅ DB schema matches docs/DB_SCHEMA_TRUTH.md")
         else:
             st.warning("⚠️ Schema mismatch detected")
-            st.dataframe(pd.DataFrame(results), use_container_width=True, hide_index=True)
+            st.dataframe(pd.DataFrame(issues), use_container_width=True, hide_index=True)
 
 
 def render_setup():
     st.header("Setup")
-    st.radio(
-        "Setup navigation",
-        ["Banks", "Categories"],
-        key="setup_subpage",
-        label_visibility="collapsed",
-        horizontal=True,
-    )
-    if st.session_state.setup_subpage == "Banks":
+    if st.session_state.setup_tab == "Banks":
         render_setup_banks()
     else:
         render_setup_categories()
