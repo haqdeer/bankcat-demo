@@ -44,6 +44,21 @@ def create_client(name: str, industry: str, country: str, business_description: 
     return int(rows[0]["id"])
 
 
+def update_client(client_id: int, name: str, industry: str, country: str, business_description: str = "") -> None:
+    _exec("""
+        UPDATE clients
+        SET name=:n,
+            industry=:i,
+            country=:c,
+            business_description=:bd
+        WHERE id=:cid;
+    """, {"n": name.strip(), "i": industry, "c": country, "bd": business_description, "cid": client_id})
+
+
+def set_client_active(client_id: int, is_active: bool) -> None:
+    _exec("UPDATE clients SET is_active=:a WHERE id=:id;", {"a": is_active, "id": client_id})
+
+
 # ---------------- Banks ----------------
 def list_banks(client_id: int, include_inactive: bool = False) -> List[dict]:
     if include_inactive:
@@ -62,6 +77,39 @@ def add_bank(client_id: int, bank_name: str, account_type: str, currency: str = 
 
 def set_bank_active(bank_id: int, is_active: bool):
     _exec("UPDATE banks SET is_active=:a WHERE id=:id;", {"a": is_active, "id": bank_id})
+
+
+def update_bank(
+    bank_id: int,
+    bank_name: str,
+    masked: str,
+    account_type: str,
+    currency: str,
+    opening_balance: Optional[float],
+) -> None:
+    _exec("""
+        UPDATE banks
+        SET bank_name=:bn,
+            account_number_masked=:m,
+            account_type=:at,
+            currency=:cur,
+            opening_balance=COALESCE(:ob, opening_balance)
+        WHERE id=:id;
+    """, {"bn": bank_name.strip(), "m": masked, "at": account_type, "cur": currency, "ob": opening_balance, "id": bank_id})
+
+
+def bank_has_transactions(bank_id: int) -> bool:
+    rows = _q("""
+        SELECT 1 AS has_tx
+        FROM transactions_draft
+        WHERE bank_id=:bid
+        UNION ALL
+        SELECT 1 AS has_tx
+        FROM transactions_committed
+        WHERE bank_id=:bid
+        LIMIT 1;
+    """, {"bid": bank_id})
+    return bool(rows)
 
 
 # ---------------- Categories ----------------
@@ -100,6 +148,26 @@ def bulk_add_categories(client_id: int, rows: List[dict]) -> Tuple[int, int]:
 
 def set_category_active(cat_id: int, is_active: bool):
     _exec("UPDATE categories SET is_active=:a WHERE id=:id;", {"a": is_active, "id": cat_id})
+
+
+def list_table_columns(table_name: str) -> List[str]:
+    rows = _q("""
+        SELECT column_name
+        FROM information_schema.columns
+        WHERE table_schema='public' AND table_name=:tn
+        ORDER BY ordinal_position;
+    """, {"tn": table_name})
+    return [r["column_name"] for r in rows]
+
+
+def update_category(cat_id: int, name: str, typ: str, nature: str) -> None:
+    _exec("""
+        UPDATE categories
+        SET category_name=:cn,
+            type=:t,
+            nature=:n
+        WHERE id=:id;
+    """, {"cn": name.strip(), "t": typ, "n": nature, "id": cat_id})
 
 
 # ---------------- Vendor memory + Keyword model ----------------
@@ -350,10 +418,17 @@ def commit_period(client_id: int, bank_id: int, period: str, committed_by: Optio
             matched += 1
     accuracy = round(matched / total, 4) if total else None
 
+    # Deactivate any prior commits for the same client+bank+period
+    _exec("""
+        UPDATE commits
+        SET is_active=FALSE
+        WHERE client_id=:cid AND bank_id=:bid AND period=:p AND is_active=TRUE;
+    """, {"cid": client_id, "bid": bank_id, "p": period})
+
     # Insert commit row
     cm = _q("""
-        INSERT INTO commits(client_id, bank_id, period, committed_by, rows_committed, accuracy)
-        VALUES (:cid,:bid,:p,:by,:n,:acc)
+        INSERT INTO commits(client_id, bank_id, period, committed_by, rows_committed, accuracy, is_active)
+        VALUES (:cid,:bid,:p,:by,:n,:acc,TRUE)
         RETURNING id;
     """, {"cid": client_id, "bid": bank_id, "p": period, "by": committed_by, "n": total, "acc": accuracy})
     commit_id = int(cm[0]["id"])
@@ -402,3 +477,135 @@ def commit_period(client_id: int, bank_id: int, period: str, committed_by: Optio
     delete_draft_period(client_id, bank_id, period)
 
     return {"ok": True, "commit_id": commit_id, "rows": total, "accuracy": accuracy}
+
+
+# ---------------- Committed Reporting ----------------
+def list_committed_periods(client_id: int, bank_id: Optional[int] = None) -> List[str]:
+    conditions = ["tc.client_id=:cid", "c.is_active=TRUE"]
+    params: Dict[str, Any] = {"cid": client_id}
+    if bank_id is not None:
+        conditions.append("tc.bank_id=:bid")
+        params["bid"] = bank_id
+
+    sql = f"""
+        SELECT DISTINCT tc.period
+        FROM transactions_committed tc
+        JOIN commits c ON c.id = tc.commit_id
+        WHERE {" AND ".join(conditions)}
+        ORDER BY tc.period DESC;
+    """
+    rows = _q(sql, params)
+    return [r["period"] for r in rows]
+
+
+def list_committed_transactions(
+    client_id: int,
+    bank_id: Optional[int] = None,
+    date_from: Optional[str] = None,
+    date_to: Optional[str] = None,
+    period: Optional[str] = None,
+) -> List[dict]:
+    conditions = ["tc.client_id=:cid", "c.is_active=TRUE"]
+    params: Dict[str, Any] = {"cid": client_id}
+    if bank_id is not None:
+        conditions.append("tc.bank_id=:bid")
+        params["bid"] = bank_id
+    if date_from is not None:
+        conditions.append("tc.tx_date >= :dfrom")
+        params["dfrom"] = date_from
+    if date_to is not None:
+        conditions.append("tc.tx_date <= :dto")
+        params["dto"] = date_to
+    if period is not None:
+        conditions.append("tc.period = :p")
+        params["p"] = period
+
+    sql = f"""
+        SELECT tc.tx_date, tc.description, tc.debit, tc.credit, tc.balance,
+               tc.category, tc.vendor, tc.confidence, tc.reason,
+               b.bank_name, tc.period
+        FROM transactions_committed tc
+        JOIN commits c ON c.id = tc.commit_id
+        JOIN banks b ON b.id = tc.bank_id
+        WHERE {" AND ".join(conditions)}
+        ORDER BY tc.tx_date ASC, tc.id ASC;
+    """
+    return _q(sql, params)
+
+
+def list_committed_pl_summary(
+    client_id: int,
+    bank_id: Optional[int] = None,
+    date_from: Optional[str] = None,
+    date_to: Optional[str] = None,
+    period: Optional[str] = None,
+) -> List[dict]:
+    conditions = ["tc.client_id=:cid", "c.is_active=TRUE"]
+    params: Dict[str, Any] = {"cid": client_id}
+    if bank_id is not None:
+        conditions.append("tc.bank_id=:bid")
+        params["bid"] = bank_id
+    if date_from is not None:
+        conditions.append("tc.tx_date >= :dfrom")
+        params["dfrom"] = date_from
+    if date_to is not None:
+        conditions.append("tc.tx_date <= :dto")
+        params["dto"] = date_to
+    if period is not None:
+        conditions.append("tc.period = :p")
+        params["p"] = period
+
+    sql = f"""
+        SELECT tc.category,
+               cat.type AS category_type,
+               SUM(tc.debit) AS total_debit,
+               SUM(tc.credit) AS total_credit,
+               SUM(tc.credit) - SUM(tc.debit) AS net_amount
+        FROM transactions_committed tc
+        JOIN commits c ON c.id = tc.commit_id
+        LEFT JOIN categories cat
+            ON cat.client_id = tc.client_id
+           AND cat.category_name = tc.category
+        WHERE {" AND ".join(conditions)}
+        GROUP BY tc.category, cat.type
+        ORDER BY tc.category ASC;
+    """
+    return _q(sql, params)
+
+
+def list_commit_metrics(
+    client_id: int,
+    bank_id: Optional[int] = None,
+    date_from: Optional[str] = None,
+    date_to: Optional[str] = None,
+    period: Optional[str] = None,
+) -> List[dict]:
+    conditions = ["c.client_id=:cid", "c.is_active=TRUE"]
+    params: Dict[str, Any] = {"cid": client_id}
+    if bank_id is not None:
+        conditions.append("c.bank_id=:bid")
+        params["bid"] = bank_id
+    if period is not None:
+        conditions.append("c.period = :p")
+        params["p"] = period
+    if date_from is not None:
+        conditions.append("c.created_at::date >= :dfrom")
+        params["dfrom"] = date_from
+    if date_to is not None:
+        conditions.append("c.created_at::date <= :dto")
+        params["dto"] = date_to
+
+    sql = f"""
+        SELECT c.id AS commit_id,
+               c.period,
+               b.bank_name,
+               c.rows_committed,
+               c.accuracy,
+               c.created_at AS committed_at,
+               c.committed_by
+        FROM commits c
+        JOIN banks b ON b.id = c.bank_id
+        WHERE {" AND ".join(conditions)}
+        ORDER BY c.created_at DESC, c.id DESC;
+    """
+    return _q(sql, params)
