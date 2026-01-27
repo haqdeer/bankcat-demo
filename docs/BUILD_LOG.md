@@ -1,3 +1,200 @@
+## 2026-01-26
+### What we built
+- Reworked navigation into standalone pages with inline setup forms and safer edit prefill logic.
+
+### Why
+- Fix navigation reliability issues and remove modal/dialog errors while keeping workflows intact.
+
+### Files changed
+- app.py
+- docs/BUILD_LOG.md
+
+### Tests done
+- Not run (UI change only).
+
+### Result
+- Pending manual verification.
+
+## 2026-01-26
+### What we built
+- Updated sidebar navigation with Settings subpages and inline setup forms to avoid dialog errors.
+
+### Why
+- Fix navigation flow and remove modal/dialog issues while keeping existing workflows intact.
+
+### Files changed
+- app.py
+- docs/BUILD_LOG.md
+
+### Tests done
+- Not run (UI change only).
+
+### Result
+- Pending manual verification.
+
+## 2026-01-26
+### What we built
+- Refreshed CRUD helpers for navigation workflows and schema verification.
+
+### Why
+- Ensure Companies/Setup flows and schema checks work correctly after the navigation update.
+
+### Files changed
+- src/crud.py
+- docs/BUILD_LOG.md
+
+### Tests done
+- Not run (helper updates only).
+
+### Result
+- Pending manual verification.
+
+## 2026-01-26
+### What we built
+- Refreshed CRUD helpers needed for grouped navigation and schema verification screens.
+
+### Why
+- Ensure Companies/Setup workflows and schema checks work correctly after the navigation update.
+
+### Files changed
+- src/crud.py
+- docs/BUILD_LOG.md
+
+### Tests done
+- Not run (helper updates only).
+
+### Result
+- Pending manual verification.
+
+## 2026-01-26
+### What we built
+- Sidebar navigation restructured + Setup modal CRUD + client selector moved to Home + Mapping tab removed + Reports placeholder.
+
+### Why
+- Align navigation cleanup with grouped sidebar and placeholder Reports screen.
+
+### Files changed
+- app.py
+- docs/BUILD_LOG.md
+
+### Tests done
+- Not run (UI change only).
+
+### Result
+- Pending manual verification.
+
+## 2026-01-26
+### What we built
+- Sidebar navigation restructured + Setup modal CRUD + client selector moved to Home + Mapping tab removed + Reports placeholder.
+
+### Why
+- Provide grouped navigation, keep workflows together, and simplify client selection across screens.
+
+### Files changed
+- app.py
+- src/crud.py
+- docs/DB_SCHEMA_TRUTH.md
+- docs/BUILD_LOG.md
+
+### Tests done
+- Not run (UI change only).
+
+### Result
+- Pending manual verification.
+
+## 2026-01-26
+### What we built
+- Added sidebar navigation tabs and reorganized screens (no feature change).
+
+### Why
+- Make navigation simpler and keep utilities under Settings without removing any functionality.
+
+### Files changed
+- app.py
+- docs/BUILD_LOG.md
+
+### Tests done
+- Not run (UI change only).
+
+### Result
+- Pending manual verification.
+
+## 2026-01-26
+### What we built
+- Fix ambiguous period query in dashboard.
+
+### Why
+- Resolve Postgres ambiguity error when loading committed periods with joined tables.
+
+### Files changed
+- src/crud.py
+- docs/BUILD_LOG.md
+
+### Tests done
+- Not run (requires DB connection).
+
+### Result
+- Pending manual verification.
+
+## 2026-01-26
+### What we built
+- Updated vendor_memory unique constraint to use vendor_key consistently in schema and migrations.
+
+### Why
+- Align constraint with the canonical vendor_key column and avoid incorrect vendor/vendor_name checks.
+
+### Files changed
+- src/schema.py
+- docs/migrations/20260126_commit_dedupe.sql
+- docs/DATA_MODEL.md
+- docs/BUILD_LOG.md
+
+### Tests done
+- Not run (schema change only).
+
+### Result
+- Pending manual verification after migration.
+
+## 2026-01-26
+### What we built
+- Added commit de-duplication using commits.is_active and updated reporting queries to only show active commits.
+- Fixed vendor_memory unique constraint to target the correct vendor column and added a migration.
+
+### Why
+- Prevent multiple commits for the same client/bank/period and ensure vendor_memory uniqueness matches the real schema.
+
+### Files changed
+- src/schema.py
+- src/crud.py
+- docs/migrations/20260126_commit_dedupe.sql
+- docs/DATA_MODEL.md
+- docs/BUILD_LOG.md
+
+### Tests done
+- Not run (requires DB migration and committed data).
+
+### Result
+- Pending manual verification after migration.
+
+## 2026-01-23
+### What we built
+- Added Step-8 committed dashboard with bank/date/period filters, committed tables, P&L summary, and commit metrics.
+
+### Why
+- Provide reporting views over committed transactions for review and accuracy tracking.
+
+### Files changed
+- app.py
+- src/crud.py
+- docs/BUILD_LOG.md
+- docs/SOP.md
+
+### Tests done
+- Not run (requires a DB with committed data in Streamlit).
+
+### Result
+- Pending manual verification in the app UI.
+
 ### What we built
 - Added Edit + Disable/Enable + Safe Delete for Clients/Banks/Categories (soft-delete)
 ## 2026-01-21

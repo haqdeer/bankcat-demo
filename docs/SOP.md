@@ -103,3 +103,9 @@ Step 1: Client & Bank Setup is done inside Intro screen
   - vendor_memory: vendor → category (+confidence)
   - keyword_model: tokens → category (weights)
 - Stores commit metrics: rows_committed, accuracy
+
+### Step-8: Dashboard (Committed)
+- Select filters (Bank, From Date, To Date, optional Period)
+- Review committed transactions with bank and period context
+- Check P&L summary by category/type with income, expense, and net totals
+- Review commit metrics (rows committed, accuracy, committed by)
