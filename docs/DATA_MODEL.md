@@ -91,10 +91,13 @@ Columns:
 - id (PK)
 - client_id
 - vendor_key
-- category
+- category_name
 - confidence
-- times_confirmed
-- last_seen
+- times_used
+- updated_at
+
+Constraints:
+- UNIQUE (client_id, vendor_key)
 
 ---
 
@@ -119,10 +122,10 @@ Columns:
 - client_id
 - bank_id
 - period
-- from_date
-- to_date
-- row_count
-- accuracy_percent
+- committed_by
+- rows_committed
+- accuracy
+- is_active
 - created_at
 ## transactions_draft (working table)
 Purpose: Stores standardized transactions before commit (editable).
@@ -137,4 +140,3 @@ Note: Review saves update final_* inside draft. Commit will copy to committed ta
 Purpose: Client-wise vendor→category memory used for suggestions.
 Columns:
 - client_id, vendor_name, category_name, confidence, created_at
-
