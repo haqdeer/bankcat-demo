@@ -148,7 +148,7 @@ with st.sidebar:
     st.markdown("### Navigation")
     st.radio(
         "Main",
-        ["Home", "Reports", "Categorisation", "Settings"],
+        ["Home", "Dashboard", "Reports", "Categorisation", "Settings"],
         key="nav_main",
         label_visibility="collapsed",
         on_change=_nav_main_changed,
@@ -856,9 +856,159 @@ def render_categorisation():
         st.warning(f"Committed sample not available yet. ({_format_exc(e)})")
 
 
+def render_dashboard():
+    st.header("Dashboard")
+    st.write("Dashboard coming soon.")
+
+
 def render_reports():
     st.header("Reports")
-    st.write("Reports coming soon.")
+    st.caption("Reports in this section only use committed (locked) transactions.")
+    client_id = _require_client()
+    if not client_id:
+        return
+
+    filter_col1, filter_col2, filter_col3, filter_col4 = st.columns(4)
+
+    with filter_col1:
+        banks_for_filter = cached_banks(client_id)
+        bank_options = ["(All Banks)"] + [
+            f"{b['id']} | {b['bank_name']} ({b['account_type']})" for b in banks_for_filter
+        ]
+        bank_filter_pick = st.selectbox("Bank filter", bank_options, key="dash_bank_filter")
+        bank_filter_id = (
+            int(bank_filter_pick.split("|")[0].strip())
+            if bank_filter_pick != "(All Banks)"
+            else None
+        )
+
+    with filter_col2:
+        default_from = dt.date.today() - dt.timedelta(days=30)
+        date_filter_from = st.date_input("From Date", value=default_from, key="dash_from_date")
+
+    with filter_col3:
+        date_filter_to = st.date_input("To Date", value=dt.date.today(), key="dash_to_date")
+
+    with filter_col4:
+        try:
+            periods = crud.list_committed_periods(client_id, bank_id=bank_filter_id)
+        except Exception as e:
+            st.error(f"Unable to load committed periods. {_format_exc(e)}")
+            periods = []
+        period_options = ["(All Periods)"] + periods
+        period_pick = st.selectbox("Period (optional)", period_options, key="dash_period_filter")
+        period_filter = None if period_pick == "(All Periods)" else period_pick
+
+    if date_filter_from > date_filter_to:
+        st.error("From Date must be before To Date.")
+        date_filter_from, date_filter_to = date_filter_to, date_filter_from
+
+    st.subheader("Committed Transactions")
+    try:
+        committed_rows = crud.list_committed_transactions(
+            client_id,
+            bank_id=bank_filter_id,
+            date_from=date_filter_from,
+            date_to=date_filter_to,
+            period=period_filter,
+        )
+        if committed_rows:
+            df_committed = pd.DataFrame(committed_rows)
+            st.dataframe(
+                df_committed[
+                    [
+                        "tx_date",
+                        "description",
+                        "debit",
+                        "credit",
+                        "balance",
+                        "category",
+                        "vendor",
+                        "confidence",
+                        "reason",
+                        "bank_name",
+                        "period",
+                    ]
+                ],
+                use_container_width=True,
+                hide_index=True,
+            )
+        else:
+            st.info("No committed transactions match the filters.")
+    except Exception as e:
+        st.error(f"Unable to load committed transactions. {_format_exc(e)}")
+
+    st.subheader("P&L Summary")
+    try:
+        pl_rows = crud.list_committed_pl_summary(
+            client_id,
+            bank_id=bank_filter_id,
+            date_from=date_filter_from,
+            date_to=date_filter_to,
+            period=period_filter,
+        )
+        if pl_rows:
+            df_pl = pd.DataFrame(pl_rows)
+            df_pl["category_type"] = df_pl["category_type"].fillna("Unmapped")
+
+            income_total = df_pl.loc[df_pl["category_type"] == "Income", "net_amount"].sum()
+            expense_total_raw = df_pl.loc[df_pl["category_type"] == "Expense", "net_amount"].sum()
+            expense_total = abs(expense_total_raw)
+            net_total = income_total - expense_total
+
+            metric_col1, metric_col2, metric_col3 = st.columns(3)
+            metric_col1.metric("Total Income", f"{income_total:,.2f}")
+            metric_col2.metric("Total Expense", f"{expense_total:,.2f}")
+            metric_col3.metric("Net (Income – Expense)", f"{net_total:,.2f}")
+
+            st.dataframe(
+                df_pl[
+                    [
+                        "category",
+                        "category_type",
+                        "total_debit",
+                        "total_credit",
+                        "net_amount",
+                    ]
+                ],
+                use_container_width=True,
+                hide_index=True,
+            )
+        else:
+            st.info("No committed data for P&L summary with current filters.")
+    except Exception as e:
+        st.error(f"Unable to load P&L summary. {_format_exc(e)}")
+
+    st.subheader("Commit Metrics")
+    try:
+        commit_rows = crud.list_commit_metrics(
+            client_id,
+            bank_id=bank_filter_id,
+            date_from=date_filter_from,
+            date_to=date_filter_to,
+            period=period_filter,
+        )
+        if commit_rows:
+            df_commits = pd.DataFrame(commit_rows)
+            st.dataframe(
+                df_commits[
+                    [
+                        "commit_id",
+                        "period",
+                        "bank_name",
+                        "rows_committed",
+                        "accuracy",
+                        "committed_at",
+                        "committed_by",
+                    ]
+                ],
+                use_container_width=True,
+                hide_index=True,
+            )
+        else:
+            st.info("No commit metrics for the selected filters.")
+    except Exception as e:
+        st.error(f"Unable to load commit metrics. {_format_exc(e)}")
 
 
 def render_settings():
@@ -927,6 +1077,8 @@ def render_settings():
 page = st.session_state.nav_page
 if page == "Home":
     render_home()
+elif page == "Dashboard":
+    render_dashboard()
 elif page == "Reports":
     render_reports()
 elif page.startswith("Companies"):
