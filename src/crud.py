@@ -420,11 +420,11 @@ def list_committed_periods(client_id: int, bank_id: Optional[int] = None) -> Lis
         params["bid"] = bank_id
 
     sql = f"""
-        SELECT DISTINCT period
+        SELECT DISTINCT tc.period
         FROM transactions_committed tc
         JOIN commits c ON c.id = tc.commit_id
         WHERE {" AND ".join(conditions)}
-        ORDER BY period DESC;
+        ORDER BY tc.period DESC;
     """
     rows = _q(sql, params)
     return [r["period"] for r in rows]

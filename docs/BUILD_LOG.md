@@ -1,5 +1,22 @@
 ## 2026-01-26
 ### What we built
+- Fix ambiguous period query in dashboard.
+
+### Why
+- Resolve Postgres ambiguity error when loading committed periods with joined tables.
+
+### Files changed
+- src/crud.py
+- docs/BUILD_LOG.md
+
+### Tests done
+- Not run (requires DB connection).
+
+### Result
+- Pending manual verification.
+
+## 2026-01-26
+### What we built
 - Updated vendor_memory unique constraint to use vendor_key consistently in schema and migrations.
 
 ### Why
