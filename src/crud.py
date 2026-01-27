@@ -150,16 +150,6 @@ def set_category_active(cat_id: int, is_active: bool):
     _exec("UPDATE categories SET is_active=:a WHERE id=:id;", {"a": is_active, "id": cat_id})
 
 
-def update_category(cat_id: int, name: str, typ: str, nature: str) -> None:
-    _exec("""
-        UPDATE categories
-        SET category_name=:cn,
-            type=:t,
-            nature=:n
-        WHERE id=:id;
-    """, {"cn": name.strip(), "t": typ, "n": nature, "id": cat_id})
-
-
 def list_table_columns(table_name: str) -> List[str]:
     rows = _q("""
         SELECT column_name
@@ -168,6 +158,16 @@ def list_table_columns(table_name: str) -> List[str]:
         ORDER BY ordinal_position;
     """, {"tn": table_name})
     return [r["column_name"] for r in rows]
+
+
+def update_category(cat_id: int, name: str, typ: str, nature: str) -> None:
+    _exec("""
+        UPDATE categories
+        SET category_name=:cn,
+            type=:t,
+            nature=:n
+        WHERE id=:id;
+    """, {"cn": name.strip(), "t": typ, "n": nature, "id": cat_id})
 
 
 # ---------------- Vendor memory + Keyword model ----------------
