@@ -1,5 +1,22 @@
 ## 2026-01-26
 ### What we built
+- Added sidebar navigation tabs and reorganized screens (no feature change).
+
+### Why
+- Make navigation simpler and keep utilities under Settings without removing any functionality.
+
+### Files changed
+- app.py
+- docs/BUILD_LOG.md
+
+### Tests done
+- Not run (UI change only).
+
+### Result
+- Pending manual verification.
+
+## 2026-01-26
+### What we built
 - Fix ambiguous period query in dashboard.
 
 ### Why
