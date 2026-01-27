@@ -44,6 +44,21 @@ def create_client(name: str, industry: str, country: str, business_description: 
     return int(rows[0]["id"])
 
 
+def update_client(client_id: int, name: str, industry: str, country: str, business_description: str = "") -> None:
+    _exec("""
+        UPDATE clients
+        SET name=:n,
+            industry=:i,
+            country=:c,
+            business_description=:bd
+        WHERE id=:cid;
+    """, {"n": name.strip(), "i": industry, "c": country, "bd": business_description, "cid": client_id})
+
+
+def set_client_active(client_id: int, is_active: bool) -> None:
+    _exec("UPDATE clients SET is_active=:a WHERE id=:id;", {"a": is_active, "id": client_id})
+
+
 # ---------------- Banks ----------------
 def list_banks(client_id: int, include_inactive: bool = False) -> List[dict]:
     if include_inactive:
@@ -62,6 +77,39 @@ def add_bank(client_id: int, bank_name: str, account_type: str, currency: str = 
 
 def set_bank_active(bank_id: int, is_active: bool):
     _exec("UPDATE banks SET is_active=:a WHERE id=:id;", {"a": is_active, "id": bank_id})
+
+
+def update_bank(
+    bank_id: int,
+    bank_name: str,
+    masked: str,
+    account_type: str,
+    currency: str,
+    opening_balance: Optional[float],
+) -> None:
+    _exec("""
+        UPDATE banks
+        SET bank_name=:bn,
+            account_number_masked=:m,
+            account_type=:at,
+            currency=:cur,
+            opening_balance=COALESCE(:ob, opening_balance)
+        WHERE id=:id;
+    """, {"bn": bank_name.strip(), "m": masked, "at": account_type, "cur": currency, "ob": opening_balance, "id": bank_id})
+
+
+def bank_has_transactions(bank_id: int) -> bool:
+    rows = _q("""
+        SELECT 1 AS has_tx
+        FROM transactions_draft
+        WHERE bank_id=:bid
+        UNION ALL
+        SELECT 1 AS has_tx
+        FROM transactions_committed
+        WHERE bank_id=:bid
+        LIMIT 1;
+    """, {"bid": bank_id})
+    return bool(rows)
 
 
 # ---------------- Categories ----------------
@@ -100,6 +148,26 @@ def bulk_add_categories(client_id: int, rows: List[dict]) -> Tuple[int, int]:
 
 def set_category_active(cat_id: int, is_active: bool):
     _exec("UPDATE categories SET is_active=:a WHERE id=:id;", {"a": is_active, "id": cat_id})
+
+
+def list_table_columns(table_name: str) -> List[str]:
+    rows = _q("""
+        SELECT column_name
+        FROM information_schema.columns
+        WHERE table_schema='public' AND table_name=:tn
+        ORDER BY ordinal_position;
+    """, {"tn": table_name})
+    return [r["column_name"] for r in rows]
+
+
+def update_category(cat_id: int, name: str, typ: str, nature: str) -> None:
+    _exec("""
+        UPDATE categories
+        SET category_name=:cn,
+            type=:t,
+            nature=:n
+        WHERE id=:id;
+    """, {"cn": name.strip(), "t": typ, "n": nature, "id": cat_id})
 
 
 # ---------------- Vendor memory + Keyword model ----------------

@@ -23,12 +23,19 @@ st.title("BankCat Demo ✅")
 REQUIRED_CRUD_APIS = (
     "list_clients",
     "create_client",
+    "update_client",
+    "set_client_active",
     "list_banks",
     "add_bank",
+    "update_bank",
+    "bank_has_transactions",
     "set_bank_active",
     "list_categories",
     "add_category",
+    "update_category",
+    "set_category_active",
     "bulk_add_categories",
+    "list_table_columns",
     "drafts_summary",
     "insert_draft_rows",
     "process_suggestions",
@@ -89,6 +96,21 @@ def cached_categories(client_id: int):
         return []
 
 
+def _load_schema_truth(path: Path) -> dict[str, list[str]]:
+    truth: dict[str, list[str]] = {}
+    current_table: str | None = None
+    for line in path.read_text().splitlines():
+        if line.startswith("## "):
+            current_table = line.replace("## ", "").strip()
+            truth[current_table] = []
+            continue
+        if current_table and line.strip().startswith("- "):
+            col = line.strip()[2:].strip()
+            if col:
+                truth[current_table].append(col)
+    return truth
+
+
 # ---------------- Sidebar Navigation ----------------
 st.markdown(
     """
@@ -106,21 +128,47 @@ st.markdown(
     unsafe_allow_html=True,
 )
 
+if "nav_page" not in st.session_state:
+    st.session_state.nav_page = "Home"
+
+
+def _nav_main_changed():
+    st.session_state.nav_page = st.session_state.nav_main
+
+
+def _nav_companies_changed():
+    st.session_state.nav_page = f"Companies:{st.session_state.nav_companies}"
+
+
+def _nav_setup_changed():
+    st.session_state.nav_page = f"Setup:{st.session_state.nav_setup}"
+
+
 with st.sidebar:
     st.markdown("### Navigation")
-    nav_choice = st.radio(
-        "Navigation",
-        [
-            "Home",
-            "Dashboard",
-            "Companies",
-            "Setup",
-            "Categorisation",
-            "Settings",
-            "Mapping",
-        ],
+    st.radio(
+        "Main",
+        ["Home", "Reports", "Categorisation", "Settings"],
+        key="nav_main",
         label_visibility="collapsed",
+        on_change=_nav_main_changed,
     )
+    with st.expander("Companies", expanded=False):
+        st.radio(
+            "Companies",
+            ["List", "Change Company", "Add Company"],
+            key="nav_companies",
+            label_visibility="collapsed",
+            on_change=_nav_companies_changed,
+        )
+    with st.expander("Setup", expanded=False):
+        st.radio(
+            "Setup",
+            ["Banks", "Categories"],
+            key="nav_setup",
+            label_visibility="collapsed",
+            on_change=_nav_setup_changed,
+        )
 
 if "client_id" not in st.session_state:
     st.session_state.client_id = None
@@ -134,9 +182,35 @@ if "date_to" not in st.session_state:
     st.session_state.date_to = None
 if "df_raw" not in st.session_state:
     st.session_state.df_raw = None
+if "year" not in st.session_state:
+    st.session_state.year = 2025
+if "month" not in st.session_state:
+    st.session_state.month = "Oct"
+if "show_add_bank" not in st.session_state:
+    st.session_state.show_add_bank = False
+if "edit_bank_id" not in st.session_state:
+    st.session_state.edit_bank_id = None
+if "show_add_category" not in st.session_state:
+    st.session_state.show_add_category = False
+if "edit_category_id" not in st.session_state:
+    st.session_state.edit_category_id = None
 
 
-def _select_client(clients: list[dict]) -> int | None:
+def _require_client() -> int | None:
+    client_id = st.session_state.client_id
+    if not client_id:
+        st.warning("Select a company on Home first.")
+        return None
+    return client_id
+
+
+def _dialog(title: str):
+    if hasattr(st, "dialog"):
+        return st.dialog(title)
+    return st.expander(title, expanded=True)
+
+
+def _client_selector(clients: list[dict], key: str) -> int | None:
     options = ["(none)"] + [f"{c['id']} | {c['name']}" for c in clients]
     selected_index = 0
     if st.session_state.client_id:
@@ -148,7 +222,7 @@ def _select_client(clients: list[dict]) -> int | None:
         "Select Client",
         options=options,
         index=selected_index,
-        key="client_select",
+        key=key,
     )
     client_id = int(client_pick.split("|")[0].strip()) if client_pick != "(none)" else None
     st.session_state.client_id = client_id
@@ -177,19 +251,63 @@ def _select_bank(banks_active: list[dict]) -> tuple[int, dict]:
 
 def render_home():
     st.header("Home")
+    clients = cached_clients()
+    _client_selector(clients, key="home_client_select")
     st.markdown("**BankCat Demo**")
     st.write("Welcome to the BankCat demo workspace.")
     st.caption("Shortcuts and quick links will be added later.")
 
 
-def render_companies():
-    st.header("Companies")
+def render_companies_list():
+    st.subheader("Company List")
     clients = cached_clients()
     dfc = pd.DataFrame(clients) if clients else pd.DataFrame()
     st.dataframe(dfc, use_container_width=True, hide_index=True)
-    client_id = _select_client(clients)
 
-    st.subheader("Create New Client")
+
+def render_companies_change():
+    st.subheader("Change Company")
+    clients = cached_clients()
+    client_id = _client_selector(clients, key="change_client_select")
+    if not client_id:
+        st.info("Select a client to edit details.")
+        return
+
+    current = next((c for c in clients if int(c["id"]) == client_id), None)
+    if not current:
+        st.info("Selected client not found.")
+        return
+
+    name = st.text_input("Client/Company Name *", value=current.get("name") or "")
+    industry = st.selectbox(
+        "Industry",
+        ["Professional Services", "Retail", "Manufacturing", "NGO", "Other"],
+        index=["Professional Services", "Retail", "Manufacturing", "NGO", "Other"].index(
+            current.get("industry") or "Professional Services"
+        ),
+    )
+    country = st.text_input("Country (optional)", value=current.get("country") or "")
+    description = st.text_area(
+        "Business Description (optional)", value=current.get("business_description") or ""
+    )
+    is_active = st.checkbox("Is Active", value=bool(current.get("is_active", True)))
+
+    if st.button("Save Company Changes"):
+        if not name.strip():
+            st.error("Client name required.")
+            return
+        try:
+            crud.update_client(client_id, name, industry, country, description)
+            crud.set_client_active(client_id, is_active)
+            st.success("Company updated ✅")
+            st.cache_data.clear()
+            st.rerun()
+        except Exception as e:
+            st.error(f"Update failed ❌\n\n{_format_exc(e)}")
+
+
+def render_companies_add():
+    st.subheader("Add Company")
     c1, c2 = st.columns(2)
     with c1:
         new_name = st.text_input("Client/Company Name *", value="")
@@ -211,113 +329,227 @@ def render_companies():
             except Exception as e:
                 st.error(f"Create client failed ❌\n\n{_format_exc(e)}")
 
-    if client_id is None:
-        st.info("Select a client to view bank and category setup in the Setup tab.")
+
+def render_companies():
+    st.header("Companies")
+    if not st.session_state.client_id:
+        st.warning("Select a company on Home first.")
+    nav = st.session_state.nav_page
+    if nav.endswith("List"):
+        render_companies_list()
+    elif nav.endswith("Change Company"):
+        render_companies_change()
+    elif nav.endswith("Add Company"):
+        render_companies_add()
+
+
+def render_setup_banks():
+    st.subheader("Banks")
+    client_id = _require_client()
+    if not client_id:
+        return
+
+    banks = cached_banks(client_id)
+    if st.button("Add new bank"):
+        st.session_state.show_add_bank = True
+
+    if st.session_state.show_add_bank:
+        with _dialog("Add Bank"):
+            bank_name = st.text_input("Bank Name *", key="add_bank_name")
+            masked = st.text_input("Account Number / Masked ID (optional)", key="add_bank_mask")
+            acct_type = st.selectbox(
+                "Account Type *",
+                ["Current", "Savings", "Credit Card", "Wallet", "Investment"],
+                key="add_bank_type",
+            )
+            currency = st.text_input("Currency (optional)", key="add_bank_currency")
+            opening = st.number_input(
+                "Opening Balance (optional)", value=0.0, step=1.0, key="add_bank_opening"
+            )
+            if st.button("Save Bank", key="add_bank_save"):
+                if not bank_name.strip():
+                    st.error("Bank name required.")
+                else:
+                    try:
+                        crud.add_bank(client_id, bank_name, acct_type, currency, masked, opening)
+                        st.success("Bank added ✅")
+                        st.cache_data.clear()
+                        st.session_state.show_add_bank = False
+                        st.rerun()
+                    except Exception as e:
+                        st.error(f"Add bank failed ❌\n\n{_format_exc(e)}")
+
+    if banks:
+        st.markdown("#### Bank List")
+        header = st.columns([3, 2, 2, 2, 1])
+        header[0].markdown("**Bank**")
+        header[1].markdown("**Account Type**")
+        header[2].markdown("**Currency**")
+        header[3].markdown("**Masked**")
+        header[4].markdown("**Edit**")
+        for bank in banks:
+            row = st.columns([3, 2, 2, 2, 1])
+            row[0].write(bank.get("bank_name"))
+            row[1].write(bank.get("account_type"))
+            row[2].write(bank.get("currency"))
+            row[3].write(bank.get("account_number_masked"))
+            if row[4].button("✏️", key=f"edit_bank_{bank['id']}"):
+                st.session_state.edit_bank_id = bank["id"]
+
+    if st.session_state.edit_bank_id:
+        edit_bank = next((b for b in banks if int(b["id"]) == st.session_state.edit_bank_id), None)
+        if edit_bank:
+            with _dialog("Edit Bank"):
+                bank_name = st.text_input(
+                    "Bank Name *", value=edit_bank.get("bank_name") or "", key="edit_bank_name"
+                )
+                masked = st.text_input(
+                    "Account Number / Masked ID (optional)",
+                    value=edit_bank.get("account_number_masked") or "",
+                    key="edit_bank_mask",
+                )
+                acct_type = st.selectbox(
+                    "Account Type *",
+                    ["Current", "Savings", "Credit Card", "Wallet", "Investment"],
+                    index=["Current", "Savings", "Credit Card", "Wallet", "Investment"].index(
+                        edit_bank.get("account_type") or "Current"
+                    ),
+                    key="edit_bank_type",
+                )
+                currency = st.text_input(
+                    "Currency (optional)", value=edit_bank.get("currency") or "", key="edit_bank_currency"
+                )
+                has_tx = crud.bank_has_transactions(edit_bank["id"])
+                if has_tx:
+                    st.info("Opening balance locked after transactions exist.")
+                opening = st.number_input(
+                    "Opening Balance (optional)",
+                    value=float(edit_bank.get("opening_balance") or 0.0),
+                    step=1.0,
+                    disabled=has_tx,
+                    key="edit_bank_opening",
+                )
+                is_active = st.checkbox(
+                    "Is Active", value=bool(edit_bank.get("is_active", True)), key="edit_bank_active"
+                )
+                if st.button("Save Bank Changes", key="edit_bank_save"):
+                    if not bank_name.strip():
+                        st.error("Bank name required.")
+                    else:
+                        try:
+                            crud.update_bank(
+                                edit_bank["id"],
+                                bank_name,
+                                masked,
+                                acct_type,
+                                currency,
+                                None if has_tx else opening,
+                            )
+                            crud.set_bank_active(edit_bank["id"], is_active)
+                            st.success("Bank updated ✅")
+                            st.cache_data.clear()
+                            st.session_state.edit_bank_id = None
+                            st.rerun()
+                        except Exception as e:
+                            st.error(f"Update bank failed ❌\n\n{_format_exc(e)}")
+
+
+def render_setup_categories():
+    st.subheader("Categories")
+    client_id = _require_client()
+    if not client_id:
+        return
+
+    cats = cached_categories(client_id)
+    if st.button("Add new category"):
+        st.session_state.show_add_category = True
+
+    if st.session_state.show_add_category:
+        with _dialog("Add Category"):
+            cat_name = st.text_input("Category Name *", key="add_cat_name")
+            cat_type = st.selectbox("Type *", ["Expense", "Income", "Other"], key="add_cat_type")
+            cat_nature = st.selectbox("Nature (Dr/Cr/Any)", ["Any", "Dr", "Cr"], key="add_cat_nature")
+            if st.button("Save Category", key="add_cat_save"):
+                if not cat_name.strip():
+                    st.error("Category name required.")
+                else:
+                    try:
+                        crud.add_category(client_id, cat_name, cat_type, cat_nature)
+                        st.success("Category added ✅")
+                        st.cache_data.clear()
+                        st.session_state.show_add_category = False
+                        st.rerun()
+                    except Exception as e:
+                        st.error(f"Add category failed ❌\n\n{_format_exc(e)}")
+
+    if cats:
+        st.markdown("#### Category List")
+        header = st.columns([3, 2, 2, 2, 1])
+        header[0].markdown("**Category**")
+        header[1].markdown("**Type**")
+        header[2].markdown("**Nature**")
+        header[3].markdown("**Active**")
+        header[4].markdown("**Edit**")
+        for cat in cats:
+            row = st.columns([3, 2, 2, 2, 1])
+            row[0].write(cat.get("category_name"))
+            row[1].write(cat.get("type"))
+            row[2].write(cat.get("nature"))
+            row[3].write("Yes" if cat.get("is_active", True) else "No")
+            if row[4].button("✏️", key=f"edit_cat_{cat['id']}"):
+                st.session_state.edit_category_id = cat["id"]
+
+    if st.session_state.edit_category_id:
+        edit_cat = next(
+            (c for c in cats if int(c["id"]) == st.session_state.edit_category_id),
+            None,
+        )
+        if edit_cat:
+            with _dialog("Edit Category"):
+                cat_name = st.text_input(
+                    "Category Name *",
+                    value=edit_cat.get("category_name") or "",
+                    key="edit_cat_name",
+                )
+                cat_type = st.selectbox(
+                    "Type *",
+                    ["Expense", "Income", "Other"],
+                    index=["Expense", "Income", "Other"].index(edit_cat.get("type") or "Expense"),
+                    key="edit_cat_type",
+                )
+                cat_nature = st.selectbox(
+                    "Nature (Dr/Cr/Any)",
+                    ["Any", "Dr", "Cr"],
+                    index=["Any", "Dr", "Cr"].index(edit_cat.get("nature") or "Any"),
+                    key="edit_cat_nature",
+                )
+                is_active = st.checkbox(
+                    "Is Active", value=bool(edit_cat.get("is_active", True)), key="edit_cat_active"
+                )
+                if st.button("Save Category Changes", key="edit_cat_save"):
+                    if not cat_name.strip():
+                        st.error("Category name required.")
+                    else:
+                        try:
+                            crud.update_category(edit_cat["id"], cat_name, cat_type, cat_nature)
+                            crud.set_category_active(edit_cat["id"], is_active)
+                            st.success("Category updated ✅")
+                            st.cache_data.clear()
+                            st.session_state.edit_category_id = None
+                            st.rerun()
+                        except Exception as e:
+                            st.error(f"Update category failed ❌\n\n{_format_exc(e)}")
 
 
 def render_setup():
     st.header("Setup")
-    client_id = st.session_state.client_id
-    if not client_id:
-        st.info("Select a client in the Companies tab first.")
+    if not _require_client():
         return
-
-    st.subheader("Banks (Client-specific Master)")
-    banks = cached_banks(client_id)
-    st.dataframe(pd.DataFrame(banks), use_container_width=True, hide_index=True)
-
-    b1, b2, b3 = st.columns(3)
-    with b1:
-        bank_name = st.text_input("Bank Name *", "")
-        masked = st.text_input("Account Number / Masked ID (optional)", "")
-    with b2:
-        acct_type = st.selectbox(
-            "Account Type *",
-            ["Current", "Savings", "Credit Card", "Wallet", "Investment"],
-        )
-        currency = st.text_input("Currency (optional)", "")
-    with b3:
-        opening = st.number_input("Opening Balance (optional)", value=0.0, step=1.0)
-    if st.button("Add Bank"):
-        if not bank_name.strip():
-            st.error("Bank name required.")
-        else:
-            try:
-                crud.add_bank(client_id, bank_name, acct_type, currency, masked, opening)
-                st.success("Bank added ✅")
-                st.cache_data.clear()
-            except Exception as e:
-                st.error(f"Add bank failed ❌\n\n{_format_exc(e)}")
-
-    st.markdown("#### Edit / Disable Bank")
-    bank_map = {
-        f"{b['id']} | {b['bank_name']} ({b['account_type']})": b for b in banks
-    }
-    bank_edit_pick = st.selectbox(
-        "Select Bank to disable/enable",
-        ["(none)"] + list(bank_map.keys()),
-    )
-    if bank_edit_pick != "(none)":
-        b = bank_map[bank_edit_pick]
-        new_active = st.checkbox("Is Active", value=bool(b.get("is_active", True)))
-        if st.button("Save Bank Active"):
-            try:
-                crud.set_bank_active(int(b["id"]), bool(new_active))
-                st.success("Saved ✅")
-                st.cache_data.clear()
-            except Exception as e:
-                st.error(f"Update bank failed ❌\n\n{_format_exc(e)}")
-
-    st.subheader("Categories (Client-specific Master)")
-    cats = cached_categories(client_id)
-    st.dataframe(pd.DataFrame(cats), use_container_width=True, hide_index=True)
-
-    st.markdown("#### Download Category Template (CSV)")
-    template = pd.DataFrame([
-        {"category_name": "", "type": "Expense", "nature": "Any"}
-    ])
-    buf = io.StringIO()
-    template.to_csv(buf, index=False)
-    st.download_button(
-        "Download Category CSV Template",
-        data=buf.getvalue(),
-        file_name="category_template.csv",
-        mime="text/csv",
-    )
-
-    st.markdown("#### Add Single Category")
-    cc1, cc2, cc3 = st.columns(3)
-    with cc1:
-        cat_name = st.text_input("Category Name *", "")
-    with cc2:
-        cat_type = st.selectbox("Type *", ["Expense", "Income", "Other"])
-    with cc3:
-        cat_nature = st.selectbox("Nature (Dr/Cr/Any)", ["Any", "Dr", "Cr"])
-
-    if st.button("Add Category"):
-        if not cat_name.strip():
-            st.error("Category name required.")
-        else:
-            try:
-                crud.add_category(client_id, cat_name, cat_type, cat_nature)
-                st.success("Category added ✅")
-                st.cache_data.clear()
-            except Exception as e:
-                st.error(f"Add category failed ❌\n\n{_format_exc(e)}")
-
-    st.markdown("#### Upload Category CSV (bulk)")
-    cat_file = st.file_uploader("Upload CSV", type=["csv"], key="cat_csv")
-    if cat_file:
-        try:
-            dfu = pd.read_csv(cat_file)
-            st.dataframe(dfu.head(20), use_container_width=True, hide_index=True)
-            rows = dfu.to_dict(orient="records")
-            if st.button("Import Categories Now"):
-                ok, bad = crud.bulk_add_categories(client_id, rows)
-                st.success(f"Imported ✅ ok={ok}, skipped={bad}")
-                st.cache_data.clear()
-        except Exception as e:
-            st.error(f"Category upload parse failed ❌\n\n{_format_exc(e)}")
+    nav = st.session_state.nav_page
+    if nav.endswith("Banks"):
+        render_setup_banks()
+    elif nav.endswith("Categories"):
+        render_setup_categories()
 
 
 def render_mapping_section(
@@ -422,9 +654,8 @@ def render_categorisation():
     st.header(
         "Categorisation (Upload → Map → Standardize → Save Draft → Suggest → Review → Commit)"
     )
-    client_id = st.session_state.client_id
+    client_id = _require_client()
     if not client_id:
-        st.info("Select a client first.")
         return
 
     try:
@@ -443,8 +674,7 @@ def render_categorisation():
     mcol1, mcol2, mcol3 = st.columns(3)
     with mcol1:
         year_range = list(range(2020, 2031))
-        default_year = st.session_state.get("year") or 2025
-        year = st.selectbox("Year", year_range, index=year_range.index(default_year))
+        year = st.selectbox("Year", year_range, index=year_range.index(st.session_state.year))
         st.session_state.year = year
     with mcol2:
         month_names = [
@@ -461,8 +691,7 @@ def render_categorisation():
             "Nov",
             "Dec",
         ]
-        default_month = st.session_state.get("month") or "Oct"
-        month = st.selectbox("Month", month_names, index=month_names.index(default_month))
+        month = st.selectbox("Month", month_names, index=month_names.index(st.session_state.month))
         st.session_state.month = month
     with mcol3:
         period = f"{year}-{month_names.index(month)+1:02d}"
@@ -627,155 +856,9 @@ def render_categorisation():
         st.warning(f"Committed sample not available yet. ({_format_exc(e)})")
 
 
-def render_dashboard():
-    st.header("Dashboard (Committed)")
-    st.caption("Reports in this section only use committed (locked) transactions.")
-    client_id = st.session_state.client_id
-    if not client_id:
-        st.info("Select a client first.")
-        return
-
-    filter_col1, filter_col2, filter_col3, filter_col4 = st.columns(4)
-
-    with filter_col1:
-        banks_for_filter = cached_banks(client_id)
-        bank_options = ["(All Banks)"] + [
-            f"{b['id']} | {b['bank_name']} ({b['account_type']})" for b in banks_for_filter
-        ]
-        bank_filter_pick = st.selectbox("Bank filter", bank_options, key="dash_bank_filter")
-        bank_filter_id = (
-            int(bank_filter_pick.split("|")[0].strip())
-            if bank_filter_pick != "(All Banks)"
-            else None
-        )
-
-    with filter_col2:
-        default_from = dt.date.today() - dt.timedelta(days=30)
-        date_filter_from = st.date_input("From Date", value=default_from, key="dash_from_date")
-
-    with filter_col3:
-        date_filter_to = st.date_input("To Date", value=dt.date.today(), key="dash_to_date")
-
-    with filter_col4:
-        try:
-            periods = crud.list_committed_periods(client_id, bank_id=bank_filter_id)
-        except Exception as e:
-            st.error(f"Unable to load committed periods. {_format_exc(e)}")
-            periods = []
-        period_options = ["(All Periods)"] + periods
-        period_pick = st.selectbox("Period (optional)", period_options, key="dash_period_filter")
-        period_filter = None if period_pick == "(All Periods)" else period_pick
-
-    if date_filter_from > date_filter_to:
-        st.error("From Date must be before To Date.")
-        date_filter_from, date_filter_to = date_filter_to, date_filter_from
-
-    st.subheader("Committed Transactions")
-    try:
-        committed_rows = crud.list_committed_transactions(
-            client_id,
-            bank_id=bank_filter_id,
-            date_from=date_filter_from,
-            date_to=date_filter_to,
-            period=period_filter,
-        )
-        if committed_rows:
-            df_committed = pd.DataFrame(committed_rows)
-            st.dataframe(
-                df_committed[
-                    [
-                        "tx_date",
-                        "description",
-                        "debit",
-                        "credit",
-                        "balance",
-                        "category",
-                        "vendor",
-                        "confidence",
-                        "reason",
-                        "bank_name",
-                        "period",
-                    ]
-                ],
-                use_container_width=True,
-                hide_index=True,
-            )
-        else:
-            st.info("No committed transactions match the filters.")
-    except Exception as e:
-        st.error(f"Unable to load committed transactions. {_format_exc(e)}")
-
-    st.subheader("P&L Summary")
-    try:
-        pl_rows = crud.list_committed_pl_summary(
-            client_id,
-            bank_id=bank_filter_id,
-            date_from=date_filter_from,
-            date_to=date_filter_to,
-            period=period_filter,
-        )
-        if pl_rows:
-            df_pl = pd.DataFrame(pl_rows)
-            df_pl["category_type"] = df_pl["category_type"].fillna("Unmapped")
-
-            income_total = df_pl.loc[df_pl["category_type"] == "Income", "net_amount"].sum()
-            expense_total_raw = df_pl.loc[df_pl["category_type"] == "Expense", "net_amount"].sum()
-            expense_total = abs(expense_total_raw)
-            net_total = income_total - expense_total
-
-            metric_col1, metric_col2, metric_col3 = st.columns(3)
-            metric_col1.metric("Total Income", f"{income_total:,.2f}")
-            metric_col2.metric("Total Expense", f"{expense_total:,.2f}")
-            metric_col3.metric("Net (Income – Expense)", f"{net_total:,.2f}")
-
-            st.dataframe(
-                df_pl[
-                    [
-                        "category",
-                        "category_type",
-                        "total_debit",
-                        "total_credit",
-                        "net_amount",
-                    ]
-                ],
-                use_container_width=True,
-                hide_index=True,
-            )
-        else:
-            st.info("No committed data for P&L summary with current filters.")
-    except Exception as e:
-        st.error(f"Unable to load P&L summary. {_format_exc(e)}")
-
-    st.subheader("Commit Metrics")
-    try:
-        commit_rows = crud.list_commit_metrics(
-            client_id,
-            bank_id=bank_filter_id,
-            date_from=date_filter_from,
-            date_to=date_filter_to,
-            period=period_filter,
-        )
-        if commit_rows:
-            df_commits = pd.DataFrame(commit_rows)
-            st.dataframe(
-                df_commits[
-                    [
-                        "commit_id",
-                        "period",
-                        "bank_name",
-                        "rows_committed",
-                        "accuracy",
-                        "committed_at",
-                        "committed_by",
-                    ]
-                ],
-                use_container_width=True,
-                hide_index=True,
-            )
-        else:
-            st.info("No commit metrics for the selected filters.")
-    except Exception as e:
-        st.error(f"Unable to load commit metrics. {_format_exc(e)}")
+def render_reports():
+    st.header("Reports")
+    st.write("Reports coming soon.")
 
 
 def render_settings():
@@ -801,32 +884,56 @@ def render_settings():
         st.cache_data.clear()
         st.success("Refreshed ✅")
 
+    st.markdown("### Verify DB Schema")
+    if st.button("Verify DB Schema"):
+        truth_path = Path("docs/DB_SCHEMA_TRUTH.md")
+        if not truth_path.exists():
+            st.error("docs/DB_SCHEMA_TRUTH.md not found. Please add schema truth file.")
+            return
+        truth = _load_schema_truth(truth_path)
+        tables = [
+            "clients",
+            "banks",
+            "categories",
+            "draft_batches",
+            "transactions_draft",
+            "commits",
+            "transactions_committed",
+            "vendor_memory",
+            "keyword_model",
+        ]
+        results = []
+        for table in tables:
+            cols = crud.list_table_columns(table)
+            expected = truth.get(table, [])
+            missing = [c for c in expected if c not in cols]
+            extra = [c for c in cols if c not in expected]
+            results.append(
+                {
+                    "table": table,
+                    "missing": ", ".join(missing) or "—",
+                    "extra": ", ".join(extra) or "—",
+                }
+            )
+        issues = [r for r in results if r["missing"] != "—" or r["extra"] != "—"]
+        if not issues:
+            st.success("✅ DB schema matches docs/DB_SCHEMA_TRUTH.md")
+        else:
+            st.warning("⚠️ Schema mismatch detected")
+            st.dataframe(pd.DataFrame(results), use_container_width=True, hide_index=True)
 
-def render_mapping():
-    st.header("Mapping")
-    client_id = st.session_state.client_id
-    bank_id = st.session_state.bank_id
-    period = st.session_state.period
-    date_from = st.session_state.date_from
-    date_to = st.session_state.date_to
-    df_raw = st.session_state.df_raw
-    if not all([client_id, bank_id, period, date_from, date_to]):
-        st.info("Select client, bank, and period in Categorisation before mapping.")
-        return
-    render_mapping_section(client_id, bank_id, period, date_from, date_to, df_raw)
 
-
-if nav_choice == "Home":
+# ---------------- Page Rendering ----------------
+page = st.session_state.nav_page
+if page == "Home":
     render_home()
-elif nav_choice == "Dashboard":
-    render_dashboard()
-elif nav_choice == "Companies":
+elif page == "Reports":
+    render_reports()
+elif page.startswith("Companies"):
     render_companies()
-elif nav_choice == "Setup":
+elif page.startswith("Setup"):
     render_setup()
-elif nav_choice == "Categorisation":
+elif page == "Categorisation":
     render_categorisation()
-elif nav_choice == "Settings":
+elif page == "Settings":
     render_settings()
-elif nav_choice == "Mapping":
-    render_mapping()

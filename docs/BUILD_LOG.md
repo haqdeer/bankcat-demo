@@ -1,5 +1,75 @@
 ## 2026-01-26
 ### What we built
+- Refreshed CRUD helpers for navigation workflows and schema verification.
+
+### Why
+- Ensure Companies/Setup flows and schema checks work correctly after the navigation update.
+
+### Files changed
+- src/crud.py
+- docs/BUILD_LOG.md
+
+### Tests done
+- Not run (helper updates only).
+
+### Result
+- Pending manual verification.
+
+## 2026-01-26
+### What we built
+- Refreshed CRUD helpers needed for grouped navigation and schema verification screens.
+
+### Why
+- Ensure Companies/Setup workflows and schema checks work correctly after the navigation update.
+
+### Files changed
+- src/crud.py
+- docs/BUILD_LOG.md
+
+### Tests done
+- Not run (helper updates only).
+
+### Result
+- Pending manual verification.
+
+## 2026-01-26
+### What we built
+- Sidebar navigation restructured + Setup modal CRUD + client selector moved to Home + Mapping tab removed + Reports placeholder.
+
+### Why
+- Align navigation cleanup with grouped sidebar and placeholder Reports screen.
+
+### Files changed
+- app.py
+- docs/BUILD_LOG.md
+
+### Tests done
+- Not run (UI change only).
+
+### Result
+- Pending manual verification.
+
+## 2026-01-26
+### What we built
+- Sidebar navigation restructured + Setup modal CRUD + client selector moved to Home + Mapping tab removed + Reports placeholder.
+
+### Why
+- Provide grouped navigation, keep workflows together, and simplify client selection across screens.
+
+### Files changed
+- app.py
+- src/crud.py
+- docs/DB_SCHEMA_TRUTH.md
+- docs/BUILD_LOG.md
+
+### Tests done
+- Not run (UI change only).
+
+### Result
+- Pending manual verification.
+
+## 2026-01-26
+### What we built
 - Added sidebar navigation tabs and reorganized screens (no feature change).
 
 ### Why
