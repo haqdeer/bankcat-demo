@@ -90,14 +90,14 @@ Client-wise vendor learning table.
 Columns:
 - id (PK)
 - client_id
-- vendor_name (or vendor)
+- vendor_key
 - category_name
 - confidence
 - times_used
 - updated_at
 
 Constraints:
-- UNIQUE (client_id, vendor_name) or UNIQUE (client_id, vendor) depending on the column present in the DB
+- UNIQUE (client_id, vendor_key)
 
 ---
 

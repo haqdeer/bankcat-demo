@@ -145,7 +145,7 @@ def init_db():
         );
         """)
 
-        # Unique (client + vendor/vendor_name)
+        # Unique (client + vendor_key)
         _do(conn, "ALTER TABLE public.vendor_memory DROP CONSTRAINT IF EXISTS vendor_memory_client_vendor_uniq;")
         _do(conn, """
         DO $$
@@ -159,11 +159,7 @@ def init_db():
             ) THEN
                 ALTER TABLE public.vendor_memory
                 ADD CONSTRAINT vendor_memory_client_vendor_uniq
-                UNIQUE (client_id, vendor);
-            ELSE
-                ALTER TABLE public.vendor_memory
-                ADD CONSTRAINT vendor_memory_client_vendor_uniq
-                UNIQUE (client_id, vendor_name);
+                UNIQUE (client_id, vendor_key);
             END IF;
         END $$;
         """)

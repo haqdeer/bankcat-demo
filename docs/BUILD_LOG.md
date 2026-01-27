@@ -1,5 +1,24 @@
 ## 2026-01-26
 ### What we built
+- Updated vendor_memory unique constraint to use vendor_key consistently in schema and migrations.
+
+### Why
+- Align constraint with the canonical vendor_key column and avoid incorrect vendor/vendor_name checks.
+
+### Files changed
+- src/schema.py
+- docs/migrations/20260126_commit_dedupe.sql
+- docs/DATA_MODEL.md
+- docs/BUILD_LOG.md
+
+### Tests done
+- Not run (schema change only).
+
+### Result
+- Pending manual verification after migration.
+
+## 2026-01-26
+### What we built
 - Added commit de-duplication using commits.is_active and updated reporting queries to only show active commits.
 - Fixed vendor_memory unique constraint to target the correct vendor column and added a migration.
 
@@ -18,8 +37,6 @@
 
 ### Result
 - Pending manual verification after migration.
-
-
 
 ## 2026-01-23
 ### What we built
