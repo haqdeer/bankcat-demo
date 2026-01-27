@@ -94,6 +94,7 @@ def init_db():
             committed_by TEXT,
             rows_committed INT NOT NULL DEFAULT 0,
             accuracy NUMERIC(6,4),
+            is_active BOOLEAN NOT NULL DEFAULT TRUE,
             created_at TIMESTAMPTZ NOT NULL DEFAULT now()
         );
         """)
@@ -144,7 +145,8 @@ def init_db():
         );
         """)
 
-        # Unique (client + vendor)
+        # Unique (client + vendor_key)
+        _do(conn, "ALTER TABLE public.vendor_memory DROP CONSTRAINT IF EXISTS vendor_memory_client_vendor_uniq;")
         _do(conn, """
         DO $$
         BEGIN
@@ -153,7 +155,7 @@ def init_db():
             ) THEN
                 ALTER TABLE public.vendor_memory
                 ADD CONSTRAINT vendor_memory_client_vendor_uniq
-                UNIQUE (client_id, vendor_name);
+                UNIQUE (client_id, vendor_key);
             END IF;
         END $$;
         """)
@@ -186,6 +188,7 @@ def init_db():
 
         # --- migrations for older DBs (safe adds)
         _do(conn, "ALTER TABLE public.commits ADD COLUMN IF NOT EXISTS committed_by TEXT;")
+        _do(conn, "ALTER TABLE public.commits ADD COLUMN IF NOT EXISTS is_active BOOLEAN NOT NULL DEFAULT TRUE;")
         _do(conn, "ALTER TABLE public.transactions_committed ADD COLUMN IF NOT EXISTS suggested_category TEXT;")
         _do(conn, "ALTER TABLE public.transactions_committed ADD COLUMN IF NOT EXISTS suggested_vendor TEXT;")
         _do(conn, "ALTER TABLE public.transactions_committed ADD COLUMN IF NOT EXISTS confidence NUMERIC(5,4);")
