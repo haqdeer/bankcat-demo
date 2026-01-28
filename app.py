@@ -4,6 +4,7 @@ import sys
 import calendar
 import datetime as dt
 import urllib.parse
+import base64
 from pathlib import Path
 
 import pandas as pd
@@ -31,6 +32,20 @@ def _logo_data_uri(path: Path) -> str:
     jpeg_text = path.read_text(encoding="utf-8")
     encoded = urllib.parse.quote(jpeg_text)
     return f"data:image/jpeg+xml;utf8,{encoded}"
+
+
+def _logo_data_uri(path: Path) -> str:
+    if not path.exists():
+        return ""
+    suffix = path.suffix.lower().lstrip(".")
+    if suffix in {"svg"}:
+        svg_text = path.read_text(encoding="utf-8")
+        encoded = urllib.parse.quote(svg_text)
+        return f"data:image/svg+xml;utf8,{encoded}"
+    data = path.read_bytes()
+    encoded = base64.b64encode(data).decode("ascii")
+    mime = "image/jpeg" if suffix in {"jpg", "jpeg"} else f"image/{suffix}"
+    return f"data:{mime};base64,{encoded}"
 
 
 REQUIRED_CRUD_APIS = (
@@ -126,7 +141,10 @@ def _load_schema_truth(path: Path) -> dict[str, list[str]]:
 
 
 # ---------------- Sidebar Navigation ----------------
-logo_uri = _logo_data_uri(ROOT / "assets" / "bankcat-logo.jpeg")
+logo_path = ROOT / "assets" / "bankcat-logo.jpeg"
+if not logo_path.exists():
+    logo_path = ROOT / "assets" / "bankcat-logo.svg"
+logo_uri = _logo_data_uri(logo_path)
 st.markdown(
     f"""
 <style>
@@ -439,7 +457,6 @@ def _select_bank(banks_active: list[dict]) -> tuple[int, dict]:
 
 
 def render_home():
-    logo_path = ROOT / "assets" / "bankcat-logo.jpeg"
     if logo_path.exists():
         col_left, col_center, col_right = st.columns([1, 4, 1])
         with col_center:

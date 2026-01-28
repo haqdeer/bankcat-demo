@@ -1,5 +1,22 @@
 ## 2026-01-26
 ### What we built
+- Fixed logo loading to support JPEG assets without UnicodeDecodeError.
+
+### Why
+- Ensure the header and Home logo render when using a JPEG asset in assets/.
+
+### Files changed
+- app.py
+- docs/BUILD_LOG.md
+
+### Tests done
+- Not run (UI change only).
+
+### Result
+- Pending manual verification.
+
+## 2026-01-26
+### What we built
 - Added a fixed three-section top header and refreshed sidebar styling with icons and active states.
 
 ### Why
