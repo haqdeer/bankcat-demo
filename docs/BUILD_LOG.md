@@ -1,5 +1,22 @@
 ## 2026-01-26
 ### What we built
+- Added a fixed three-section top header and refreshed sidebar styling with icons and active states.
+
+### Why
+- Deliver the requested layout with a persistent header, search/theme/fullscreen controls, and branded sidebar styling.
+
+### Files changed
+- app.py
+- docs/BUILD_LOG.md
+
+### Tests done
+- Not run (UI change only).
+
+### Result
+- Pending manual verification.
+
+## 2026-01-26
+### What we built
 - Stabilized navigation, inline Setup/Companies forms, and schema verification expectations.
 
 ### Why

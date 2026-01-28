@@ -3,6 +3,7 @@ import io
 import sys
 import calendar
 import datetime as dt
+import urllib.parse
 from pathlib import Path
 
 import pandas as pd
@@ -14,6 +15,14 @@ if str(ROOT) not in sys.path:
 
 from src.schema import init_db
 from src import crud
+
+
+def _logo_data_uri(path: Path) -> str:
+    if not path.exists():
+        return ""
+    svg_text = path.read_text(encoding="utf-8")
+    encoded = urllib.parse.quote(svg_text)
+    return f"data:image/svg+xml;utf8,{encoded}"
 
 
 REQUIRED_CRUD_APIS = (
@@ -109,18 +118,153 @@ def _load_schema_truth(path: Path) -> dict[str, list[str]]:
 
 
 # ---------------- Sidebar Navigation ----------------
+logo_uri = _logo_data_uri(ROOT / "assets" / "bankcat-logo.svg")
 st.markdown(
-    """
+    f"""
 <style>
-[data-testid="stSidebar"] {
-    width: 220px;
-    min-width: 220px;
-}
-[data-testid="stSidebar"] .block-container {
-    padding-top: 0.75rem;
+body.bankcat-sidebar-collapsed [data-testid="stSidebar"] {{
+    margin-left: -260px;
+    width: 0;
+    min-width: 0;
+}}
+[data-testid="stSidebar"] {{
+    width: 240px;
+    min-width: 240px;
+    background: #ffffff;
+    transition: margin-left 0.2s ease, width 0.2s ease;
+}}
+[data-testid="stSidebar"] .block-container {{
+    padding-top: 4.5rem;
     padding-bottom: 0.75rem;
-}
+}}
+[data-testid="stAppViewContainer"] > .main {{
+    padding-top: 5rem;
+}}
+[data-testid="stSidebar"] button {{
+    background: #0f9d58;
+    color: #ffffff;
+    border-radius: 10px;
+    border: 1px solid #0f9d58;
+    font-weight: 600;
+}}
+[data-testid="stSidebar"] button:hover {{
+    background: #0c8048;
+    border-color: #0c8048;
+    color: #ffffff;
+}}
+[data-testid="stSidebar"] button:disabled {{
+    background: #ffffff;
+    color: #0f9d58;
+    border: 1px solid #0f9d58;
+    opacity: 1;
+}}
+.bankcat-header {{
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: 64px;
+    display: flex;
+    align-items: center;
+    z-index: 1000;
+    box-shadow: 0 2px 6px rgba(0,0,0,0.08);
+}}
+.bankcat-header__section {{
+    height: 100%;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 0 18px;
+}}
+.bankcat-header__left {{
+    background: #ffffff;
+    flex: 0 0 34%;
+}}
+.bankcat-header__middle {{
+    background: #0f9d58;
+    flex: 1;
+    justify-content: center;
+    color: #ffffff;
+}}
+.bankcat-header__right {{
+    background: #ffffff;
+    flex: 0 0 28%;
+    justify-content: flex-end;
+}}
+.bankcat-header__logo {{
+    height: 38px;
+}}
+.bankcat-header__btn {{
+    background: transparent;
+    border: none;
+    color: inherit;
+    font-size: 18px;
+    cursor: pointer;
+}}
+.bankcat-search {{
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}}
+.bankcat-search input {{
+    width: 0;
+    opacity: 0;
+    transition: width 0.2s ease, opacity 0.2s ease;
+    border-radius: 16px;
+    border: none;
+    padding: 6px 10px;
+}}
+.bankcat-search.expanded input {{
+    width: 220px;
+    opacity: 1;
+}}
+.bankcat-header__right select {{
+    border-radius: 16px;
+    padding: 6px 10px;
+    border: 1px solid #e5e7eb;
+}}
 </style>
+<div class="bankcat-header">
+  <div class="bankcat-header__section bankcat-header__left">
+    <button class="bankcat-header__btn" id="sidebar-toggle" aria-label="Toggle sidebar">☰</button>
+    <img class="bankcat-header__logo" src="{logo_uri}" alt="BankCat logo" />
+  </div>
+  <div class="bankcat-header__section bankcat-header__middle">
+    <div class="bankcat-search" id="bankcat-search">
+      <button class="bankcat-header__btn" id="search-toggle" aria-label="Search">🔍</button>
+      <input type="text" placeholder="Search" />
+    </div>
+    <button class="bankcat-header__btn" aria-label="Theme">🌓</button>
+    <button class="bankcat-header__btn" id="fullscreen-toggle" aria-label="Fullscreen">⛶</button>
+  </div>
+  <div class="bankcat-header__section bankcat-header__right">
+    <button class="bankcat-header__btn" aria-label="Notifications">🔔</button>
+    <select aria-label="User menu">
+      <option>Admin</option>
+      <option>Profile</option>
+      <option>Sign out</option>
+    </select>
+  </div>
+</div>
+<script>
+const toggleSidebar = () => {{
+  document.body.classList.toggle('bankcat-sidebar-collapsed');
+}};
+const toggleSearch = () => {{
+  const search = document.getElementById('bankcat-search');
+  search.classList.toggle('expanded');
+}};
+const toggleFullscreen = () => {{
+  if (!document.fullscreenElement) {{
+    document.documentElement.requestFullscreen();
+  }} else {{
+    document.exitFullscreen();
+  }}
+}};
+document.getElementById('sidebar-toggle')?.addEventListener('click', toggleSidebar);
+document.getElementById('search-toggle')?.addEventListener('click', toggleSearch);
+document.getElementById('fullscreen-toggle')?.addEventListener('click', toggleFullscreen);
+</script>
     """,
     unsafe_allow_html=True,
 )
@@ -173,28 +317,62 @@ if st.session_state.nav_page == "Setup":
 
 with st.sidebar:
     st.markdown("### Navigation")
+    page_labels = {
+        "Home": "🏠 Home",
+        "Reports": "📊 Reports",
+        "Dashboard": "📈 Dashboard",
+        "Categorisation": "🧠 Categorisation",
+        "Settings": "⚙️ Settings",
+    }
     for page in ["Home", "Reports", "Dashboard", "Categorisation", "Settings"]:
-        if st.button(page, use_container_width=True, key=f"nav_{page}"):
+        if st.button(
+            page_labels[page],
+            use_container_width=True,
+            key=f"nav_{page}",
+            disabled=st.session_state.nav_page == page,
+        ):
             st.session_state.nav_page = page
             st.session_state.sidebar_companies_open = False
             st.session_state.sidebar_setup_open = False
 
     companies_chevron = "▾" if st.session_state.sidebar_companies_open else "▸"
-    if st.button(f"{companies_chevron} Companies", use_container_width=True, key="toggle_companies"):
+    if st.button(
+        f"{companies_chevron} 🏢 Companies",
+        use_container_width=True,
+        key="toggle_companies",
+        disabled=st.session_state.nav_page == "Companies",
+    ):
         st.session_state.sidebar_companies_open = not st.session_state.sidebar_companies_open
     if st.session_state.sidebar_companies_open:
         for tab in ["List", "Change Company", "Add Company"]:
-            if st.button(tab, use_container_width=True, key=f"companies_tab_{tab}"):
+            if st.button(
+                tab,
+                use_container_width=True,
+                key=f"companies_tab_{tab}",
+                disabled=st.session_state.nav_page == "Companies"
+                and st.session_state.companies_tab == tab,
+            ):
                 st.session_state.nav_page = "Companies"
                 st.session_state.companies_tab = tab
                 st.session_state.sidebar_companies_open = True
 
     setup_chevron = "▾" if st.session_state.sidebar_setup_open else "▸"
-    if st.button(f"{setup_chevron} Setup", use_container_width=True, key="toggle_setup"):
+    if st.button(
+        f"{setup_chevron} 🛠️ Setup",
+        use_container_width=True,
+        key="toggle_setup",
+        disabled=st.session_state.nav_page == "Setup",
+    ):
         st.session_state.sidebar_setup_open = not st.session_state.sidebar_setup_open
     if st.session_state.sidebar_setup_open:
         for tab in ["Banks", "Categories"]:
-            if st.button(tab, use_container_width=True, key=f"setup_tab_{tab}"):
+            if st.button(
+                tab,
+                use_container_width=True,
+                key=f"setup_tab_{tab}",
+                disabled=st.session_state.nav_page == "Setup"
+                and st.session_state.setup_tab == tab,
+            ):
                 st.session_state.nav_page = "Setup"
                 st.session_state.setup_tab = tab
                 st.session_state.sidebar_setup_open = True
@@ -253,7 +431,7 @@ def _select_bank(banks_active: list[dict]) -> tuple[int, dict]:
 
 
 def render_home():
-    logo_path = ROOT / "assets" / "bankcat-logo.jpeg"
+    logo_path = ROOT / "assets" / "bankcat-logo.svg"
     if logo_path.exists():
         col_left, col_center, col_right = st.columns([1, 4, 1])
         with col_center:
