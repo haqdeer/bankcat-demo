@@ -43,11 +43,11 @@ def suggest_one(
     is_credit = (credit or 0) > 0 and (debit or 0) in (0, None)
 
     # --- Vendor memory match (client-specific) ---
-    # vendor_memory rows: vendor_name, category_name, confidence
+    # vendor_memory rows: vendor_key, category, confidence
     for vm in vendor_memory:
-        v = _norm(vm.get("vendor_name", ""))
+        v = _norm(vm.get("vendor_key", ""))
         if v and v in d:
-            return vm.get("category_name"), vm.get("vendor_name"), float(vm.get("confidence") or 0.92), "Vendor memory match"
+            return vm.get("category"), vm.get("vendor_key"), float(vm.get("confidence") or 0.92), "Vendor memory match"
 
     # --- Rule keywords (MVP starter pack) ---
     rules = [
