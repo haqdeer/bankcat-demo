@@ -1,5 +1,24 @@
 ## 2026-01-26
 ### What we built
+- Fixed the persistent header/ sidebar overlap and made the header show the active page title in a full-height green center section.
+- Switched sidebar navigation to immediate, clickable buttons with active styling driven by session state.
+- Made DB schema verification deterministic and stable between clicks, allowing known extras like updated_at.
+
+### Why
+- Ensure the header is always visible, navigation highlights correctly, and schema checks do not fluctuate.
+
+### Files changed
+- app.py
+- docs/BUILD_LOG.md
+
+### Tests done
+- Not run (UI change only).
+
+### Result
+- Pending manual verification.
+
+## 2026-01-26
+### What we built
 - Fixed logo loading to support JPEG assets without UnicodeDecodeError.
 
 ### Why

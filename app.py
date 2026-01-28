@@ -140,10 +140,63 @@ def _load_schema_truth(path: Path) -> dict[str, list[str]]:
     return truth
 
 
+def _run_schema_check() -> dict[str, object]:
+    truth_path = Path("docs/DB_SCHEMA_TRUTH.md")
+    if not truth_path.exists():
+        return {"error": "docs/DB_SCHEMA_TRUTH.md not found. Please add schema truth file."}
+    truth = _load_schema_truth(truth_path)
+    expected_tables = set(truth.keys())
+    actual_tables = set(crud.list_tables())
+    tables = sorted(expected_tables | actual_tables)
+    allowed_extra = {"updated_at"}
+    results = []
+    for table in tables:
+        expected = truth.get(table, [])
+        actual = crud.list_table_columns(table) if table in actual_tables else []
+        missing = [c for c in expected if c not in actual]
+        extra = [c for c in actual if c not in expected and c not in allowed_extra]
+        results.append(
+            {
+                "table": table,
+                "table_present": "Yes" if table in actual_tables else "No",
+                "missing_columns": ", ".join(missing) or "—",
+                "extra_columns": ", ".join(extra) or "—",
+            }
+        )
+    issues = [
+        r
+        for r in results
+        if r["missing_columns"] != "—"
+        or r["extra_columns"] != "—"
+        or r["table_present"] == "No"
+    ]
+    return {"issues": issues}
+
+
 # ---------------- Sidebar Navigation ----------------
 logo_path = ROOT / "assets" / "bankcat-logo.jpeg"
-if not logo_path.exists():
-    logo_path = ROOT / "assets" / "bankcat-logo.svg"
+if "active_page" not in st.session_state:
+    st.session_state.active_page = st.session_state.get("nav_page", "Home")
+if "active_subpage" not in st.session_state:
+    legacy_subpage = None
+    if st.session_state.active_page == "Companies":
+        legacy_subpage = st.session_state.get("companies_tab", "List")
+    elif st.session_state.active_page == "Setup":
+        legacy_subpage = st.session_state.get("setup_tab", "Banks")
+    st.session_state.active_subpage = legacy_subpage
+if st.session_state.active_page == "Companies" and not st.session_state.active_subpage:
+    st.session_state.active_subpage = "List"
+if st.session_state.active_page == "Setup" and not st.session_state.active_subpage:
+    st.session_state.active_subpage = "Banks"
+
+active_page = st.session_state.active_page
+active_subpage = st.session_state.active_subpage
+page_title = active_page
+if active_page == "Companies" and active_subpage:
+    page_title = f"Companies > {active_subpage}"
+elif active_page == "Setup" and active_subpage:
+    page_title = f"Setup > {active_subpage}"
+
 logo_uri = _logo_data_uri(logo_path)
 st.markdown(
     f"""
@@ -156,33 +209,42 @@ body.bankcat-sidebar-collapsed [data-testid="stSidebar"] {{
 [data-testid="stSidebar"] {{
     width: 240px;
     min-width: 240px;
+    top: 64px;
+    height: calc(100vh - 64px);
     background: #ffffff;
+    z-index: 900;
     transition: margin-left 0.2s ease, width 0.2s ease;
 }}
 [data-testid="stSidebar"] .block-container {{
-    padding-top: 4.5rem;
+    padding-top: 1rem;
     padding-bottom: 0.75rem;
 }}
 [data-testid="stAppViewContainer"] > .main {{
     padding-top: 5rem;
 }}
-[data-testid="stSidebar"] button {{
+[data-testid="stSidebar"] button[data-testid="baseButton-primary"] {{
     background: #0f9d58;
     color: #ffffff;
     border-radius: 10px;
     border: 1px solid #0f9d58;
     font-weight: 600;
 }}
-[data-testid="stSidebar"] button:hover {{
+[data-testid="stSidebar"] button[data-testid="baseButton-primary"]:hover {{
     background: #0c8048;
     border-color: #0c8048;
     color: #ffffff;
 }}
-[data-testid="stSidebar"] button:disabled {{
+[data-testid="stSidebar"] button[data-testid="baseButton-secondary"] {{
     background: #ffffff;
     color: #0f9d58;
     border: 1px solid #0f9d58;
-    opacity: 1;
+    border-radius: 10px;
+    font-weight: 600;
+}}
+[data-testid="stSidebar"] button[data-testid="baseButton-secondary"]:hover {{
+    background: #f3f4f6;
+    color: #0f9d58;
+    border: 1px solid #0f9d58;
 }}
 .bankcat-header {{
     position: fixed;
@@ -227,22 +289,10 @@ body.bankcat-sidebar-collapsed [data-testid="stSidebar"] {{
     font-size: 18px;
     cursor: pointer;
 }}
-.bankcat-search {{
-    display: flex;
-    align-items: center;
-    gap: 8px;
-}}
-.bankcat-search input {{
-    width: 0;
-    opacity: 0;
-    transition: width 0.2s ease, opacity 0.2s ease;
-    border-radius: 16px;
-    border: none;
-    padding: 6px 10px;
-}}
-.bankcat-search.expanded input {{
-    width: 220px;
-    opacity: 1;
+.bankcat-header__title {{
+    font-size: 20px;
+    font-weight: 700;
+    letter-spacing: 0.2px;
 }}
 .bankcat-header__right select {{
     border-radius: 16px;
@@ -256,14 +306,11 @@ body.bankcat-sidebar-collapsed [data-testid="stSidebar"] {{
     <img class="bankcat-header__logo" src="{logo_uri}" alt="BankCat logo" />
   </div>
   <div class="bankcat-header__section bankcat-header__middle">
-    <div class="bankcat-search" id="bankcat-search">
-      <button class="bankcat-header__btn" id="search-toggle" aria-label="Search">🔍</button>
-      <input type="text" placeholder="Search" />
-    </div>
-    <button class="bankcat-header__btn" aria-label="Theme">🌓</button>
-    <button class="bankcat-header__btn" id="fullscreen-toggle" aria-label="Fullscreen">⛶</button>
+    <span class="bankcat-header__title">{page_title}</span>
   </div>
   <div class="bankcat-header__section bankcat-header__right">
+    <button class="bankcat-header__btn" aria-label="Theme">🌓</button>
+    <button class="bankcat-header__btn" id="fullscreen-toggle" aria-label="Fullscreen">⛶</button>
     <button class="bankcat-header__btn" aria-label="Notifications">🔔</button>
     <select aria-label="User menu">
       <option>Admin</option>
@@ -276,10 +323,6 @@ body.bankcat-sidebar-collapsed [data-testid="stSidebar"] {{
 const toggleSidebar = () => {{
   document.body.classList.toggle('bankcat-sidebar-collapsed');
 }};
-const toggleSearch = () => {{
-  const search = document.getElementById('bankcat-search');
-  search.classList.toggle('expanded');
-}};
 const toggleFullscreen = () => {{
   if (!document.fullscreenElement) {{
     document.documentElement.requestFullscreen();
@@ -288,19 +331,12 @@ const toggleFullscreen = () => {{
   }}
 }};
 document.getElementById('sidebar-toggle')?.addEventListener('click', toggleSidebar);
-document.getElementById('search-toggle')?.addEventListener('click', toggleSearch);
 document.getElementById('fullscreen-toggle')?.addEventListener('click', toggleFullscreen);
 </script>
     """,
     unsafe_allow_html=True,
 )
 
-if "nav_page" not in st.session_state:
-    st.session_state.nav_page = "Home"
-if "companies_subpage" not in st.session_state:
-    st.session_state.companies_subpage = "List"
-if "setup_subpage" not in st.session_state:
-    st.session_state.setup_subpage = "Banks"
 if "active_client_id" not in st.session_state:
     st.session_state.active_client_id = None
 if "active_client_name" not in st.session_state:
@@ -327,22 +363,26 @@ if "setup_categories_mode" not in st.session_state:
     st.session_state.setup_categories_mode = "list"
 if "setup_category_edit_id" not in st.session_state:
     st.session_state.setup_category_edit_id = None
-if "companies_tab" not in st.session_state:
-    st.session_state.companies_tab = "List"
-if "setup_tab" not in st.session_state:
-    st.session_state.setup_tab = "Banks"
 if "sidebar_companies_open" not in st.session_state:
     st.session_state.sidebar_companies_open = False
 if "sidebar_setup_open" not in st.session_state:
     st.session_state.sidebar_setup_open = False
-if st.session_state.nav_page == "Companies":
+if st.session_state.active_page == "Companies":
     st.session_state.sidebar_companies_open = True
-if st.session_state.nav_page == "Setup":
+if st.session_state.active_page == "Setup":
     st.session_state.sidebar_setup_open = True
 
 
 with st.sidebar:
     st.markdown("### Navigation")
+    def _set_active_page(page: str, subpage: str | None = None) -> None:
+        st.session_state.active_page = page
+        st.session_state.active_subpage = subpage
+        st.rerun()
+
+    def _button_type(is_active: bool) -> str:
+        return "secondary" if is_active else "primary"
+
     page_labels = {
         "Home": "🏠 Home",
         "Reports": "📊 Reports",
@@ -351,57 +391,78 @@ with st.sidebar:
         "Settings": "⚙️ Settings",
     }
     for page in ["Home", "Reports", "Dashboard", "Categorisation", "Settings"]:
+        is_active = st.session_state.active_page == page
         if st.button(
             page_labels[page],
             use_container_width=True,
             key=f"nav_{page}",
-            disabled=st.session_state.nav_page == page,
+            type=_button_type(is_active),
         ):
-            st.session_state.nav_page = page
             st.session_state.sidebar_companies_open = False
             st.session_state.sidebar_setup_open = False
+            _set_active_page(page, None)
 
     companies_chevron = "▾" if st.session_state.sidebar_companies_open else "▸"
+    companies_active = st.session_state.active_page == "Companies"
     if st.button(
         f"{companies_chevron} 🏢 Companies",
         use_container_width=True,
         key="toggle_companies",
-        disabled=st.session_state.nav_page == "Companies",
+        type=_button_type(companies_active),
     ):
-        st.session_state.sidebar_companies_open = not st.session_state.sidebar_companies_open
+        if companies_active:
+            st.session_state.sidebar_companies_open = not st.session_state.sidebar_companies_open
+            st.rerun()
+        else:
+            st.session_state.sidebar_companies_open = True
+            st.session_state.sidebar_setup_open = False
+            _set_active_page("Companies", "List")
     if st.session_state.sidebar_companies_open:
         for tab in ["List", "Change Company", "Add Company"]:
+            tab_active = (
+                st.session_state.active_page == "Companies"
+                and st.session_state.active_subpage == tab
+            )
             if st.button(
                 tab,
                 use_container_width=True,
                 key=f"companies_tab_{tab}",
-                disabled=st.session_state.nav_page == "Companies"
-                and st.session_state.companies_tab == tab,
+                type=_button_type(tab_active),
             ):
-                st.session_state.nav_page = "Companies"
-                st.session_state.companies_tab = tab
                 st.session_state.sidebar_companies_open = True
+                st.session_state.sidebar_setup_open = False
+                _set_active_page("Companies", tab)
 
     setup_chevron = "▾" if st.session_state.sidebar_setup_open else "▸"
+    setup_active = st.session_state.active_page == "Setup"
     if st.button(
         f"{setup_chevron} 🛠️ Setup",
         use_container_width=True,
         key="toggle_setup",
-        disabled=st.session_state.nav_page == "Setup",
+        type=_button_type(setup_active),
     ):
-        st.session_state.sidebar_setup_open = not st.session_state.sidebar_setup_open
+        if setup_active:
+            st.session_state.sidebar_setup_open = not st.session_state.sidebar_setup_open
+            st.rerun()
+        else:
+            st.session_state.sidebar_setup_open = True
+            st.session_state.sidebar_companies_open = False
+            _set_active_page("Setup", "Banks")
     if st.session_state.sidebar_setup_open:
         for tab in ["Banks", "Categories"]:
+            tab_active = (
+                st.session_state.active_page == "Setup"
+                and st.session_state.active_subpage == tab
+            )
             if st.button(
                 tab,
                 use_container_width=True,
                 key=f"setup_tab_{tab}",
-                disabled=st.session_state.nav_page == "Setup"
-                and st.session_state.setup_tab == tab,
+                type=_button_type(tab_active),
             ):
-                st.session_state.nav_page = "Setup"
-                st.session_state.setup_tab = tab
                 st.session_state.sidebar_setup_open = True
+                st.session_state.sidebar_companies_open = False
+                _set_active_page("Setup", tab)
 
 
 def _require_active_client() -> int | None:
@@ -754,9 +815,9 @@ def render_companies_add():
 
 def render_companies():
     st.header("Companies")
-    if st.session_state.companies_tab == "List":
+    if st.session_state.active_subpage == "List":
         render_companies_list()
-    elif st.session_state.companies_tab == "Change Company":
+    elif st.session_state.active_subpage == "Change Company":
         render_companies_change()
     else:
         render_companies_add()
@@ -1401,36 +1462,18 @@ def render_settings():
         st.success("Refreshed ✅")
 
     st.markdown("### Verify DB Schema")
+    if "schema_check_result" not in st.session_state:
+        st.session_state.schema_check_result = None
     if st.button("Verify DB Schema"):
-        truth_path = Path("docs/DB_SCHEMA_TRUTH.md")
-        if not truth_path.exists():
-            st.error("docs/DB_SCHEMA_TRUTH.md not found. Please add schema truth file.")
+        st.session_state.schema_check_result = _run_schema_check()
+        st.rerun()
+
+    schema_result = st.session_state.schema_check_result
+    if schema_result:
+        if schema_result.get("error"):
+            st.error(schema_result["error"])
             return
-        truth = _load_schema_truth(truth_path)
-        expected_tables = set(truth.keys())
-        actual_tables = set(crud.list_tables())
-        tables = sorted(expected_tables | actual_tables)
-        results = []
-        for table in tables:
-            expected = truth.get(table, [])
-            actual = crud.list_table_columns(table) if table in actual_tables else []
-            missing = [c for c in expected if c not in actual]
-            extra = [c for c in actual if c not in expected]
-            results.append(
-                {
-                    "table": table,
-                    "table_present": "Yes" if table in actual_tables else "No",
-                    "missing_columns": ", ".join(missing) or "—",
-                    "extra_columns": ", ".join(extra) or "—",
-                }
-            )
-        issues = [
-            r
-            for r in results
-            if r["missing_columns"] != "—"
-            or r["extra_columns"] != "—"
-            or r["table_present"] == "No"
-        ]
+        issues = schema_result.get("issues", [])
         if not issues:
             st.success("✅ DB schema matches docs/DB_SCHEMA_TRUTH.md")
         else:
@@ -1440,14 +1483,14 @@ def render_settings():
 
 def render_setup():
     st.header("Setup")
-    if st.session_state.setup_tab == "Banks":
+    if st.session_state.active_subpage == "Banks":
         render_setup_banks()
     else:
         render_setup_categories()
 
 
 # ---------------- Page Rendering ----------------
-page = st.session_state.nav_page
+page = st.session_state.active_page
 if page == "Home":
     render_home()
 elif page == "Dashboard":
