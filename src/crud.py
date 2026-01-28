@@ -44,6 +44,21 @@ def create_client(name: str, industry: str, country: str, business_description: 
     return int(rows[0]["id"])
 
 
+def update_client(client_id: int, name: str, industry: str, country: str, business_description: str = "") -> None:
+    _exec("""
+        UPDATE clients
+        SET name=:n,
+            industry=:i,
+            country=:c,
+            business_description=:bd
+        WHERE id=:cid;
+    """, {"n": name.strip(), "i": industry, "c": country, "bd": business_description, "cid": client_id})
+
+
+def set_client_active(client_id: int, is_active: bool) -> None:
+    _exec("UPDATE clients SET is_active=:a WHERE id=:id;", {"a": is_active, "id": client_id})
+
+
 # ---------------- Banks ----------------
 def list_banks(client_id: int, include_inactive: bool = False) -> List[dict]:
     if include_inactive:
@@ -53,7 +68,7 @@ def list_banks(client_id: int, include_inactive: bool = False) -> List[dict]:
 
 def add_bank(client_id: int, bank_name: str, account_type: str, currency: str = "", masked: str = "", opening_balance: Optional[float] = None) -> int:
     rows = _q("""
-        INSERT INTO banks(client_id, bank_name, account_type, currency, account_number_masked, opening_balance)
+        INSERT INTO banks(client_id, bank_name, account_type, currency, account_masked, opening_balance)
         VALUES (:cid,:bn,:at,:cur,:m,:ob)
         RETURNING id;
     """, {"cid": client_id, "bn": bank_name, "at": account_type, "cur": currency, "m": masked, "ob": opening_balance})
@@ -62,6 +77,39 @@ def add_bank(client_id: int, bank_name: str, account_type: str, currency: str = 
 
 def set_bank_active(bank_id: int, is_active: bool):
     _exec("UPDATE banks SET is_active=:a WHERE id=:id;", {"a": is_active, "id": bank_id})
+
+
+def update_bank(
+    bank_id: int,
+    bank_name: str,
+    masked: str,
+    account_type: str,
+    currency: str,
+    opening_balance: Optional[float],
+) -> None:
+    _exec("""
+        UPDATE banks
+        SET bank_name=:bn,
+            account_masked=:m,
+            account_type=:at,
+            currency=:cur,
+            opening_balance=COALESCE(:ob, opening_balance)
+        WHERE id=:id;
+    """, {"bn": bank_name.strip(), "m": masked, "at": account_type, "cur": currency, "ob": opening_balance, "id": bank_id})
+
+
+def bank_has_transactions(bank_id: int) -> bool:
+    rows = _q("""
+        SELECT 1 AS has_tx
+        FROM transactions_draft
+        WHERE bank_id=:bid
+        UNION ALL
+        SELECT 1 AS has_tx
+        FROM transactions_committed
+        WHERE bank_id=:bid
+        LIMIT 1;
+    """, {"bid": bank_id})
+    return bool(rows)
 
 
 # ---------------- Categories ----------------
@@ -102,30 +150,64 @@ def set_category_active(cat_id: int, is_active: bool):
     _exec("UPDATE categories SET is_active=:a WHERE id=:id;", {"a": is_active, "id": cat_id})
 
 
+def list_table_columns(table_name: str) -> List[str]:
+    rows = _q("""
+        SELECT column_name
+        FROM information_schema.columns
+        WHERE table_schema='public' AND table_name=:tn
+        ORDER BY ordinal_position;
+    """, {"tn": table_name})
+    return [r["column_name"] for r in rows]
+
+
+def list_tables() -> List[str]:
+    rows = _q("""
+        SELECT table_name
+        FROM information_schema.tables
+        WHERE table_schema='public' AND table_type='BASE TABLE'
+        ORDER BY table_name;
+    """)
+    return [r["table_name"] for r in rows]
+
+
+def update_category(cat_id: int, name: str, typ: str, nature: str) -> None:
+    _exec("""
+        UPDATE categories
+        SET category_name=:cn,
+            type=:t,
+            nature=:n
+        WHERE id=:id;
+    """, {"cn": name.strip(), "t": typ, "n": nature, "id": cat_id})
+
+
 # ---------------- Vendor memory + Keyword model ----------------
+def _normalize_vendor_key(vendor: str) -> str:
+    return (vendor or "").strip().lower()
+
+
 def list_vendor_memory(client_id: int) -> List[dict]:
     return _q("""
-        SELECT vendor_name, category_name, confidence, times_used
+        SELECT vendor_key, category, confidence, times_confirmed, last_seen
         FROM vendor_memory
         WHERE client_id=:cid
-        ORDER BY confidence DESC, times_used DESC, vendor_name ASC;
+        ORDER BY confidence DESC, times_confirmed DESC, vendor_key ASC;
     """, {"cid": client_id})
 
 
 def _upsert_vendor_memory(client_id: int, vendor: str, category: str, delta_conf: float = 0.03):
-    vendor = (vendor or "").strip()
-    if not vendor:
+    vendor_key = _normalize_vendor_key(vendor)
+    if not vendor_key:
         return
     _exec("""
-        INSERT INTO vendor_memory(client_id, vendor_name, category_name, confidence, times_used)
-        VALUES (:cid,:v,:c,0.70,1)
-        ON CONFLICT (client_id, vendor_name)
+        INSERT INTO vendor_memory(client_id, vendor_key, category, confidence, times_confirmed, last_seen)
+        VALUES (:cid,:v,:c,0.70,1,now())
+        ON CONFLICT (client_id, vendor_key)
         DO UPDATE SET
-            category_name = EXCLUDED.category_name,
-            times_used = vendor_memory.times_used + 1,
+            category = EXCLUDED.category,
+            times_confirmed = vendor_memory.times_confirmed + 1,
             confidence = LEAST(0.9999, vendor_memory.confidence + :dc),
-            updated_at = now();
-    """, {"cid": client_id, "v": vendor, "c": category, "dc": delta_conf})
+            last_seen = now();
+    """, {"cid": client_id, "v": vendor_key, "c": category, "dc": delta_conf})
 
 
 def _upsert_keyword_weight(client_id: int, token: str, category: str, delta: float):
@@ -133,12 +215,13 @@ def _upsert_keyword_weight(client_id: int, token: str, category: str, delta: flo
     if not token or len(token) < 3:
         return
     _exec("""
-        INSERT INTO keyword_model(client_id, token, category, weight, times_used)
-        VALUES (:cid,:t,:c,:w,1)
+        INSERT INTO keyword_model(client_id, token, category, weight, times_used, updated_at)
+        VALUES (:cid,:t,:c,:w,1,now())
         ON CONFLICT (client_id, token, category)
         DO UPDATE SET
             weight = keyword_model.weight + EXCLUDED.weight,
-            times_used = keyword_model.times_used + 1;
+            times_used = keyword_model.times_used + 1,
+            updated_at = now();
     """, {"cid": client_id, "t": token, "c": category, "w": float(delta)})
 
 
@@ -243,7 +326,7 @@ def process_suggestions(client_id: int, bank_id: int, period: str, bank_account_
     fallback_income = cat_names_income[0] if cat_names_income else "Income"
     fallback_exp = cat_names_exp[0] if cat_names_exp else "Expense"
 
-    vm = {v["vendor_name"].lower(): v for v in list_vendor_memory(client_id)}
+    vm = {v["vendor_key"]: v for v in list_vendor_memory(client_id)}
     kw = keyword_weights(client_id)
     # build token -> best category
     token_best: Dict[str, Tuple[str, float]] = {}
@@ -271,9 +354,10 @@ def process_suggestions(client_id: int, bank_id: int, period: str, bank_account_
         reason = "Heuristic"
 
         # 1) vendor memory match
-        if vendor_guess and vendor_guess.lower() in vm:
-            suggested_cat = vm[vendor_guess.lower()]["category_name"]
-            confidence = float(vm[vendor_guess.lower()]["confidence"])
+        vendor_key = _normalize_vendor_key(vendor_guess)
+        if vendor_key and vendor_key in vm:
+            suggested_cat = vm[vendor_key]["category"]
+            confidence = float(vm[vendor_key]["confidence"])
             reason = "Vendor memory"
         else:
             # 2) keyword weight
@@ -350,10 +434,17 @@ def commit_period(client_id: int, bank_id: int, period: str, committed_by: Optio
             matched += 1
     accuracy = round(matched / total, 4) if total else None
 
+    # Deactivate any prior commits for the same client+bank+period
+    _exec("""
+        UPDATE commits
+        SET is_active=FALSE
+        WHERE client_id=:cid AND bank_id=:bid AND period=:p AND is_active=TRUE;
+    """, {"cid": client_id, "bid": bank_id, "p": period})
+
     # Insert commit row
     cm = _q("""
-        INSERT INTO commits(client_id, bank_id, period, committed_by, rows_committed, accuracy)
-        VALUES (:cid,:bid,:p,:by,:n,:acc)
+        INSERT INTO commits(client_id, bank_id, period, committed_by, rows_committed, accuracy, is_active)
+        VALUES (:cid,:bid,:p,:by,:n,:acc,TRUE)
         RETURNING id;
     """, {"cid": client_id, "bid": bank_id, "p": period, "by": committed_by, "n": total, "acc": accuracy})
     commit_id = int(cm[0]["id"])
@@ -402,3 +493,135 @@ def commit_period(client_id: int, bank_id: int, period: str, committed_by: Optio
     delete_draft_period(client_id, bank_id, period)
 
     return {"ok": True, "commit_id": commit_id, "rows": total, "accuracy": accuracy}
+
+
+# ---------------- Committed Reporting ----------------
+def list_committed_periods(client_id: int, bank_id: Optional[int] = None) -> List[str]:
+    conditions = ["tc.client_id=:cid", "c.is_active=TRUE"]
+    params: Dict[str, Any] = {"cid": client_id}
+    if bank_id is not None:
+        conditions.append("tc.bank_id=:bid")
+        params["bid"] = bank_id
+
+    sql = f"""
+        SELECT DISTINCT tc.period
+        FROM transactions_committed tc
+        JOIN commits c ON c.id = tc.commit_id
+        WHERE {" AND ".join(conditions)}
+        ORDER BY tc.period DESC;
+    """
+    rows = _q(sql, params)
+    return [r["period"] for r in rows]
+
+
+def list_committed_transactions(
+    client_id: int,
+    bank_id: Optional[int] = None,
+    date_from: Optional[str] = None,
+    date_to: Optional[str] = None,
+    period: Optional[str] = None,
+) -> List[dict]:
+    conditions = ["tc.client_id=:cid", "c.is_active=TRUE"]
+    params: Dict[str, Any] = {"cid": client_id}
+    if bank_id is not None:
+        conditions.append("tc.bank_id=:bid")
+        params["bid"] = bank_id
+    if date_from is not None:
+        conditions.append("tc.tx_date >= :dfrom")
+        params["dfrom"] = date_from
+    if date_to is not None:
+        conditions.append("tc.tx_date <= :dto")
+        params["dto"] = date_to
+    if period is not None:
+        conditions.append("tc.period = :p")
+        params["p"] = period
+
+    sql = f"""
+        SELECT tc.tx_date, tc.description, tc.debit, tc.credit, tc.balance,
+               tc.category, tc.vendor, tc.confidence, tc.reason,
+               b.bank_name, tc.period
+        FROM transactions_committed tc
+        JOIN commits c ON c.id = tc.commit_id
+        JOIN banks b ON b.id = tc.bank_id
+        WHERE {" AND ".join(conditions)}
+        ORDER BY tc.tx_date ASC, tc.id ASC;
+    """
+    return _q(sql, params)
+
+
+def list_committed_pl_summary(
+    client_id: int,
+    bank_id: Optional[int] = None,
+    date_from: Optional[str] = None,
+    date_to: Optional[str] = None,
+    period: Optional[str] = None,
+) -> List[dict]:
+    conditions = ["tc.client_id=:cid", "c.is_active=TRUE"]
+    params: Dict[str, Any] = {"cid": client_id}
+    if bank_id is not None:
+        conditions.append("tc.bank_id=:bid")
+        params["bid"] = bank_id
+    if date_from is not None:
+        conditions.append("tc.tx_date >= :dfrom")
+        params["dfrom"] = date_from
+    if date_to is not None:
+        conditions.append("tc.tx_date <= :dto")
+        params["dto"] = date_to
+    if period is not None:
+        conditions.append("tc.period = :p")
+        params["p"] = period
+
+    sql = f"""
+        SELECT tc.category,
+               cat.type AS category_type,
+               SUM(tc.debit) AS total_debit,
+               SUM(tc.credit) AS total_credit,
+               SUM(tc.credit) - SUM(tc.debit) AS net_amount
+        FROM transactions_committed tc
+        JOIN commits c ON c.id = tc.commit_id
+        LEFT JOIN categories cat
+            ON cat.client_id = tc.client_id
+           AND cat.category_name = tc.category
+        WHERE {" AND ".join(conditions)}
+        GROUP BY tc.category, cat.type
+        ORDER BY tc.category ASC;
+    """
+    return _q(sql, params)
+
+
+def list_commit_metrics(
+    client_id: int,
+    bank_id: Optional[int] = None,
+    date_from: Optional[str] = None,
+    date_to: Optional[str] = None,
+    period: Optional[str] = None,
+) -> List[dict]:
+    conditions = ["c.client_id=:cid", "c.is_active=TRUE"]
+    params: Dict[str, Any] = {"cid": client_id}
+    if bank_id is not None:
+        conditions.append("c.bank_id=:bid")
+        params["bid"] = bank_id
+    if period is not None:
+        conditions.append("c.period = :p")
+        params["p"] = period
+    if date_from is not None:
+        conditions.append("c.created_at::date >= :dfrom")
+        params["dfrom"] = date_from
+    if date_to is not None:
+        conditions.append("c.created_at::date <= :dto")
+        params["dto"] = date_to
+
+    sql = f"""
+        SELECT c.id AS commit_id,
+               c.period,
+               b.bank_name,
+               c.rows_committed,
+               c.accuracy,
+               c.created_at AS committed_at,
+               c.committed_by
+        FROM commits c
+        JOIN banks b ON b.id = c.bank_id
+        WHERE {" AND ".join(conditions)}
+        ORDER BY c.created_at DESC, c.id DESC;
+    """
+    return _q(sql, params)
