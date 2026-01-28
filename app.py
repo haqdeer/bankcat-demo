@@ -25,6 +25,14 @@ def _logo_data_uri(path: Path) -> str:
     return f"data:image/svg+xml;utf8,{encoded}"
 
 
+def _logo_data_uri(path: Path) -> str:
+    if not path.exists():
+        return ""
+    svg_text = path.read_text(encoding="utf-8")
+    encoded = urllib.parse.quote(svg_text)
+    return f"data:image/svg+xml;utf8,{encoded}"
+
+
 REQUIRED_CRUD_APIS = (
     "list_clients",
     "create_client",
