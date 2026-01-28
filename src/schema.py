@@ -150,8 +150,12 @@ def init_db():
         _do(conn, """
         DO $$
         BEGIN
-            IF NOT EXISTS (
-                SELECT 1 FROM pg_constraint WHERE conname = 'vendor_memory_client_vendor_uniq'
+            IF EXISTS (
+                SELECT 1
+                FROM information_schema.columns
+                WHERE table_schema = 'public'
+                  AND table_name = 'vendor_memory'
+                  AND column_name = 'vendor'
             ) THEN
                 ALTER TABLE public.vendor_memory
                 ADD CONSTRAINT vendor_memory_client_vendor_uniq
