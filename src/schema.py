@@ -33,7 +33,7 @@ def init_db():
             id BIGSERIAL PRIMARY KEY,
             client_id BIGINT NOT NULL REFERENCES clients(id) ON DELETE CASCADE,
             bank_name TEXT NOT NULL,
-            account_number_masked TEXT,
+            account_masked TEXT,
             account_type TEXT NOT NULL DEFAULT 'Current',
             currency TEXT,
             opening_balance NUMERIC(18,2),
@@ -94,6 +94,7 @@ def init_db():
             committed_by TEXT,
             rows_committed INT NOT NULL DEFAULT 0,
             accuracy NUMERIC(6,4),
+            is_active BOOLEAN NOT NULL DEFAULT TRUE,
             created_at TIMESTAMPTZ NOT NULL DEFAULT now()
         );
         """)
@@ -136,15 +137,16 @@ def init_db():
         CREATE TABLE IF NOT EXISTS vendor_memory (
             id BIGSERIAL PRIMARY KEY,
             client_id BIGINT NOT NULL REFERENCES clients(id) ON DELETE CASCADE,
-            vendor_name TEXT NOT NULL,
-            category_name TEXT NOT NULL,
+            vendor_key TEXT NOT NULL,
+            category TEXT NOT NULL,
             confidence NUMERIC(6,4) NOT NULL DEFAULT 0.70,
-            times_used INT NOT NULL DEFAULT 1,
-            updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+            times_confirmed INT NOT NULL DEFAULT 1,
+            last_seen TIMESTAMPTZ NOT NULL DEFAULT now()
         );
         """)
 
-        # Unique (client + vendor)
+        # Unique (client + vendor_key)
+        _do(conn, "ALTER TABLE public.vendor_memory DROP CONSTRAINT IF EXISTS vendor_memory_client_vendor_uniq;")
         _do(conn, """
         DO $$
         BEGIN
@@ -153,7 +155,7 @@ def init_db():
             ) THEN
                 ALTER TABLE public.vendor_memory
                 ADD CONSTRAINT vendor_memory_client_vendor_uniq
-                UNIQUE (client_id, vendor_name);
+                UNIQUE (client_id, vendor_key);
             END IF;
         END $$;
         """)
@@ -166,7 +168,8 @@ def init_db():
             token TEXT NOT NULL,
             category TEXT NOT NULL,
             weight NUMERIC(10,4) NOT NULL DEFAULT 0,
-            times_used INT NOT NULL DEFAULT 0
+            times_used INT NOT NULL DEFAULT 0,
+            updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
         );
         """)
 
@@ -186,11 +189,18 @@ def init_db():
 
         # --- migrations for older DBs (safe adds)
         _do(conn, "ALTER TABLE public.commits ADD COLUMN IF NOT EXISTS committed_by TEXT;")
+        _do(conn, "ALTER TABLE public.commits ADD COLUMN IF NOT EXISTS is_active BOOLEAN NOT NULL DEFAULT TRUE;")
         _do(conn, "ALTER TABLE public.transactions_committed ADD COLUMN IF NOT EXISTS suggested_category TEXT;")
         _do(conn, "ALTER TABLE public.transactions_committed ADD COLUMN IF NOT EXISTS suggested_vendor TEXT;")
         _do(conn, "ALTER TABLE public.transactions_committed ADD COLUMN IF NOT EXISTS confidence NUMERIC(5,4);")
         _do(conn, "ALTER TABLE public.transactions_committed ADD COLUMN IF NOT EXISTS reason TEXT;")
 
         _do(conn, "ALTER TABLE public.keyword_model ADD COLUMN IF NOT EXISTS times_used INT NOT NULL DEFAULT 0;")
+        _do(conn, "ALTER TABLE public.keyword_model ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ NOT NULL DEFAULT now();")
+        _do(conn, "ALTER TABLE public.banks ADD COLUMN IF NOT EXISTS account_masked TEXT;")
+        _do(conn, "ALTER TABLE public.vendor_memory ADD COLUMN IF NOT EXISTS vendor_key TEXT;")
+        _do(conn, "ALTER TABLE public.vendor_memory ADD COLUMN IF NOT EXISTS category TEXT;")
+        _do(conn, "ALTER TABLE public.vendor_memory ADD COLUMN IF NOT EXISTS times_confirmed INT NOT NULL DEFAULT 1;")
+        _do(conn, "ALTER TABLE public.vendor_memory ADD COLUMN IF NOT EXISTS last_seen TIMESTAMPTZ NOT NULL DEFAULT now();")
 
     return True
