@@ -87,11 +87,11 @@ This file defines the expected column names per table for schema verification.
 ## vendor_memory
 - id
 - client_id
-- vendor_key
-- category
+- vendor_name
+- category_name
 - confidence
-- times_confirmed
-- last_seen
+- times_used
+- updated_at
 
 ## keyword_model
 - id
@@ -100,4 +100,3 @@ This file defines the expected column names per table for schema verification.
 - category
 - weight
 - times_used
-- updated_at

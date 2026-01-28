@@ -172,16 +172,16 @@ with st.sidebar:
         if st.button(page, use_container_width=True, key=f"nav_{page}"):
             st.session_state.nav_page = page
 
-    if st.session_state.nav_page == "Companies":
-        st.markdown("#### Companies")
+    with st.expander("Companies", expanded=st.session_state.nav_page == "Companies"):
         for tab in ["List", "Change Company", "Add Company"]:
             if st.button(tab, use_container_width=True, key=f"companies_tab_{tab}"):
+                st.session_state.nav_page = "Companies"
                 st.session_state.companies_tab = tab
 
-    if st.session_state.nav_page == "Setup":
-        st.markdown("#### Setup")
+    with st.expander("Setup", expanded=st.session_state.nav_page == "Setup"):
         for tab in ["Banks", "Categories"]:
             if st.button(tab, use_container_width=True, key=f"setup_tab_{tab}"):
+                st.session_state.nav_page = "Setup"
                 st.session_state.setup_tab = tab
 
 
@@ -516,7 +516,6 @@ def render_companies_add():
             st.session_state.setup_categories_mode = "list"
             st.session_state.setup_category_edit_id = None
             st.rerun()
-        return
 
     if st.session_state.setup_categories_mode == "bulk_upload":
         st.markdown("#### Bulk Upload Categories (CSV)")
@@ -690,18 +689,6 @@ def render_setup_categories():
         st.session_state.setup_categories_mode = "bulk_upload"
         st.session_state.setup_category_edit_id = None
         st.rerun()
-
-    st.subheader("Statement Date Range (optional but recommended)")
-    month_idx = month_names.index(month) + 1
-    last_day = calendar.monthrange(year, month_idx)[1]
-    default_range = (
-        st.session_state.date_from or dt.date(year, month_idx, 1),
-        st.session_state.date_to or dt.date(year, month_idx, last_day),
-    )
-    dr = st.date_input("Select From-To", value=default_range)
-    date_from, date_to = dr if isinstance(dr, tuple) else (dr, dr)
-    st.session_state.date_from = date_from
-    st.session_state.date_to = date_to
 
     st.subheader("Existing Drafts (this client + bank)")
     try:
