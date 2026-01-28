@@ -250,6 +250,38 @@ def drafts_summary(client_id: int, bank_id: int) -> List[dict]:
     """, {"cid": client_id, "bid": bank_id})
 
 
+def get_draft_summary(client_id: int, bank_id: int, period: str) -> Optional[dict]:
+    rows = _q("""
+        SELECT COUNT(*) AS row_count,
+               MIN(tx_date) AS min_date,
+               MAX(tx_date) AS max_date,
+               MAX(created_at) AS last_saved,
+               SUM(
+                   CASE
+                       WHEN (suggested_category IS NOT NULL AND suggested_category <> '')
+                            OR status IN ('SYSTEM_SUGGESTED','USER_FINALISED')
+                       THEN 1
+                       ELSE 0
+                   END
+               ) AS suggested_count,
+               SUM(
+                   CASE
+                       WHEN final_category IS NOT NULL AND final_category <> ''
+                       THEN 1
+                       ELSE 0
+                   END
+               ) AS final_count
+        FROM transactions_draft
+        WHERE client_id=:cid AND bank_id=:bid AND period=:p;
+    """, {"cid": client_id, "bid": bank_id, "p": period})
+    if not rows:
+        return None
+    summary = rows[0]
+    if int(summary.get("row_count") or 0) == 0:
+        return None
+    return summary
+
+
 def delete_draft_period(client_id: int, bank_id: int, period: str):
     _exec("""
         DELETE FROM transactions_draft
@@ -283,6 +315,36 @@ def load_draft(client_id: int, bank_id: int, period: str) -> List[dict]:
     return _q("""
         SELECT *
         FROM transactions_draft
+        WHERE client_id=:cid AND bank_id=:bid AND period=:p
+        ORDER BY tx_date ASC, id ASC;
+    """, {"cid": client_id, "bid": bank_id, "p": period})
+
+
+def load_draft_rows(client_id: int, bank_id: int, period: str) -> List[dict]:
+    return load_draft(client_id, bank_id, period)
+
+
+def get_commit_summary(client_id: int, bank_id: int, period: str) -> Optional[dict]:
+    rows = _q("""
+        SELECT c.id AS commit_id,
+               c.rows_committed AS row_count,
+               c.created_at AS committed_at,
+               MIN(tc.tx_date) AS min_date,
+               MAX(tc.tx_date) AS max_date
+        FROM commits c
+        LEFT JOIN transactions_committed tc ON tc.commit_id = c.id
+        WHERE c.client_id=:cid AND c.bank_id=:bid AND c.period=:p
+        GROUP BY c.id, c.rows_committed, c.created_at
+        ORDER BY c.created_at DESC
+        LIMIT 1;
+    """, {"cid": client_id, "bid": bank_id, "p": period})
+    return rows[0] if rows else None
+
+
+def load_committed_rows(client_id: int, bank_id: int, period: str) -> List[dict]:
+    return _q("""
+        SELECT *
+        FROM transactions_committed
         WHERE client_id=:cid AND bank_id=:bid AND period=:p
         ORDER BY tx_date ASC, id ASC;
     """, {"cid": client_id, "bid": bank_id, "p": period})
