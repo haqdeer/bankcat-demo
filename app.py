@@ -259,7 +259,9 @@ def _select_bank(banks_active: list[dict]) -> tuple[int, dict]:
 def render_home():
     logo_path = ROOT / "assets" / "bankcat-logo.svg"
     if logo_path.exists():
-        st.image(str(logo_path), width=180)
+        col_left, col_center, col_right = st.columns([1, 4, 1])
+        with col_center:
+            st.image(str(logo_path), width=520)
     st.header("Home")
     clients = cached_clients()
     _select_active_client(clients)

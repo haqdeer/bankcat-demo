@@ -341,6 +341,24 @@
 - Dashboard: P&L + Accuracy metrics from commits + committed data
 ## 2026-01-26
 ### What we built
+- Centered and enlarged the BankCat logo on the Home page.
+
+### Why
+- Match the updated branding placement request for the landing experience.
+
+### Files changed
+- app.py
+- assets/bankcat-logo.svg
+- docs/BUILD_LOG.md
+
+### Tests done
+- Not run (UI change only).
+
+### Result
+- Pending manual verification.
+
+## 2026-01-26
+### What we built
 - Simplified sidebar navigation to a single accordion-style Companies/Setup section and restored bank masked account handling.
 - Updated schema verification to compare doc truth vs live tables/columns, and aligned schema docs with Supabase columns.
 - Added the BankCat logo to the Home page.
