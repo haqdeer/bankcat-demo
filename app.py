@@ -15,10 +15,6 @@ if str(ROOT) not in sys.path:
 from src.schema import init_db
 from src import crud
 
-st.set_page_config(page_title="BankCat Demo", layout="wide")
-
-st.title("BankCat Demo ✅")
-
 
 REQUIRED_CRUD_APIS = (
     "list_clients",
