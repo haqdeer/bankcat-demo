@@ -16,10 +16,6 @@ if str(ROOT) not in sys.path:
 from src.schema import init_db
 from src import crud
 
-st.set_page_config(page_title="BankCat Demo", layout="wide")
-
-st.title("BankCat Demo ✅")
-
 
 def _logo_data_uri(path: Path) -> str:
     if not path.exists():
@@ -670,6 +666,59 @@ def render_companies_add():
         if not new_name.strip():
             st.error("Client name required.")
         else:
+            current_nature = "Any"
+        if current_nature not in allowed_natures:
+            current_nature = "Any"
+        cat_name = st.text_input(
+            "Category Name *",
+            value=edit_cat.get("category_name") or "",
+            key="edit_cat_name",
+        )
+        st.text_input(
+            "Category Code",
+            value=edit_cat.get("category_code") or "",
+            disabled=True,
+            key="edit_cat_code",
+        )
+        cat_type = st.selectbox(
+            "Type *",
+            ["Expense", "Income", "Other"],
+            index=["Expense", "Income", "Other"].index(edit_cat.get("type") or "Expense"),
+            key="edit_cat_type",
+        )
+        cat_nature = st.selectbox(
+            "Nature (Debit/Credit/Any)",
+            allowed_natures,
+            index=allowed_natures.index(current_nature),
+            key="edit_cat_nature",
+        )
+        is_active = st.checkbox(
+            "Is Active", value=bool(edit_cat.get("is_active", True)), key="edit_cat_active"
+        )
+        col1, col2 = st.columns(2)
+        if col1.button("Save Category Changes", key="edit_cat_save"):
+            if not cat_name.strip():
+                st.error("Category name required.")
+            else:
+                try:
+                    crud.update_category(edit_cat["id"], cat_name, cat_type, cat_nature)
+                    crud.set_category_active(edit_cat["id"], is_active)
+                    st.success("Category updated ✅")
+                    st.cache_data.clear()
+                    st.session_state.setup_categories_mode = "list"
+                    st.session_state.setup_category_edit_id = None
+                    st.rerun()
+                except Exception as e:
+                    st.error(f"Update category failed ❌\n\n{_format_exc(e)}")
+        if col2.button("Cancel", key="edit_cat_cancel"):
+            st.session_state.setup_categories_mode = "list"
+            st.session_state.setup_category_edit_id = None
+            st.rerun()
+
+    if st.session_state.setup_categories_mode == "bulk_upload":
+        st.markdown("#### Bulk Upload Categories (CSV)")
+        cat_file = st.file_uploader("Upload CSV", type=["csv"], key="cat_csv")
+        if cat_file:
             try:
                 cid = crud.create_client(new_name, new_industry, new_country, new_desc)
                 st.success(f"Created client id={cid}")
@@ -839,18 +888,32 @@ def render_setup_categories():
         st.session_state.setup_category_edit_id = None
         st.rerun()
 
-    st.markdown("#### Download Category Template (CSV)")
-    template = pd.DataFrame([
-        {"category_name": "", "type": "Expense", "nature": "Any"}
+    st.subheader("Existing Drafts (this client + bank)")
+    try:
+        summary = crud.drafts_summary(client_id, bank_id)
+        st.dataframe(pd.DataFrame(summary), use_container_width=True, hide_index=True)
+    except Exception as e:
+        st.warning(f"Draft summary unavailable. ({_format_exc(e)})")
+
+    st.subheader("Upload Template (CSV)")
+    stmt_template = pd.DataFrame([
+        {
+            "Date": "2025-10-01",
+            "Description": "POS Purchase Example Vendor",
+            "Dr": 100.00,
+            "Cr": 0.00,
+            "Closing": "",
+        }
     ])
-    buf = io.StringIO()
-    template.to_csv(buf, index=False)
+    buf2 = io.StringIO()
+    stmt_template.to_csv(buf2, index=False)
     st.download_button(
-        "Download Category CSV Template",
-        data=buf.getvalue(),
-        file_name="category_template.csv",
+        "Download Statement CSV Template",
+        data=buf2.getvalue(),
+        file_name="statement_template.csv",
         mime="text/csv",
     )
+    st.caption("Minimum columns: Date + Description. Dr/Cr recommended. Closing optional (can be blank).")
 
     if st.session_state.setup_categories_mode == "add":
         st.markdown("#### Add Category")
