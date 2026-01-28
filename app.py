@@ -36,6 +36,7 @@ REQUIRED_CRUD_APIS = (
     "set_category_active",
     "bulk_add_categories",
     "list_table_columns",
+    "list_tables",
     "drafts_summary",
     "insert_draft_rows",
     "process_suggestions",
@@ -164,25 +165,43 @@ if "companies_tab" not in st.session_state:
     st.session_state.companies_tab = "List"
 if "setup_tab" not in st.session_state:
     st.session_state.setup_tab = "Banks"
+if "sidebar_companies_open" not in st.session_state:
+    st.session_state.sidebar_companies_open = False
+if "sidebar_setup_open" not in st.session_state:
+    st.session_state.sidebar_setup_open = False
+if st.session_state.nav_page == "Companies":
+    st.session_state.sidebar_companies_open = True
+if st.session_state.nav_page == "Setup":
+    st.session_state.sidebar_setup_open = True
 
 
 with st.sidebar:
     st.markdown("### Navigation")
-    for page in ["Home", "Reports", "Dashboard", "Companies", "Setup", "Categorisation", "Settings"]:
+    for page in ["Home", "Reports", "Dashboard", "Categorisation", "Settings"]:
         if st.button(page, use_container_width=True, key=f"nav_{page}"):
             st.session_state.nav_page = page
+            st.session_state.sidebar_companies_open = False
+            st.session_state.sidebar_setup_open = False
 
-    with st.expander("Companies", expanded=st.session_state.nav_page == "Companies"):
+    companies_chevron = "▾" if st.session_state.sidebar_companies_open else "▸"
+    if st.button(f"{companies_chevron} Companies", use_container_width=True, key="toggle_companies"):
+        st.session_state.sidebar_companies_open = not st.session_state.sidebar_companies_open
+    if st.session_state.sidebar_companies_open:
         for tab in ["List", "Change Company", "Add Company"]:
             if st.button(tab, use_container_width=True, key=f"companies_tab_{tab}"):
                 st.session_state.nav_page = "Companies"
                 st.session_state.companies_tab = tab
+                st.session_state.sidebar_companies_open = True
 
-    with st.expander("Setup", expanded=st.session_state.nav_page == "Setup"):
+    setup_chevron = "▾" if st.session_state.sidebar_setup_open else "▸"
+    if st.button(f"{setup_chevron} Setup", use_container_width=True, key="toggle_setup"):
+        st.session_state.sidebar_setup_open = not st.session_state.sidebar_setup_open
+    if st.session_state.sidebar_setup_open:
         for tab in ["Banks", "Categories"]:
             if st.button(tab, use_container_width=True, key=f"setup_tab_{tab}"):
                 st.session_state.nav_page = "Setup"
                 st.session_state.setup_tab = tab
+                st.session_state.sidebar_setup_open = True
 
 
 def _require_active_client() -> int | None:
@@ -238,6 +257,9 @@ def _select_bank(banks_active: list[dict]) -> tuple[int, dict]:
 
 
 def render_home():
+    logo_path = ROOT / "assets" / "bankcat-logo.svg"
+    if logo_path.exists():
+        st.image(str(logo_path), width=180)
     st.header("Home")
     clients = cached_clients()
     _select_active_client(clients)
@@ -598,7 +620,7 @@ def render_setup_banks():
         )
         masked = st.text_input(
             "Account Number / Masked ID (optional)",
-            value=edit_bank.get("account_number_masked") or "",
+            value=edit_bank.get("account_masked") or "",
             key="edit_bank_mask",
         )
         acct_type = st.selectbox(
@@ -665,8 +687,8 @@ def render_setup_banks():
             row[0].write(bank.get("bank_name"))
             row[1].write(bank.get("account_type"))
             row[2].write(bank.get("currency"))
-            row[3].write(bank.get("account_number_masked") or "")
-            if row[4].button("✏️", key=f"edit_bank_{bank['id']}"):
+            row[3].write(bank.get("account_masked") or "")
+            if row[4].button("✎", key=f"edit_bank_{bank['id']}", help="Edit bank"):
                 st.session_state.setup_banks_mode = "edit"
                 st.session_state.setup_bank_edit_id = bank["id"]
                 st.rerun()
@@ -844,7 +866,7 @@ def render_setup_categories():
             row[1].write(cat.get("type"))
             row[2].write(cat.get("nature"))
             row[3].write("Yes" if cat.get("is_active", True) else "No")
-            if row[4].button("✏️", key=f"edit_cat_{cat['id']}"):
+            if row[4].button("✎", key=f"edit_cat_{cat['id']}", help="Edit category"):
                 st.session_state.setup_categories_mode = "edit"
                 st.session_state.setup_category_edit_id = cat["id"]
                 st.rerun()
@@ -1184,29 +1206,30 @@ def render_settings():
             st.error("docs/DB_SCHEMA_TRUTH.md not found. Please add schema truth file.")
             return
         truth = _load_schema_truth(truth_path)
-        tables = [
-            "banks",
-            "categories",
-            "clients",
-            "commits",
-            "draft_batches",
-            "keyword_model",
-            "transactions_committed",
-            "transactions_draft",
-            "vendor_memory",
-        ]
+        expected_tables = set(truth.keys())
+        actual_tables = set(crud.list_tables())
+        tables = sorted(expected_tables | actual_tables)
         results = []
         for table in tables:
-            cols = crud.list_table_columns(table)
             expected = truth.get(table, [])
-            missing = [c for c in expected if c not in cols]
+            actual = crud.list_table_columns(table) if table in actual_tables else []
+            missing = [c for c in expected if c not in actual]
+            extra = [c for c in actual if c not in expected]
             results.append(
                 {
                     "table": table,
-                    "missing": ", ".join(missing) or "—",
+                    "table_present": "Yes" if table in actual_tables else "No",
+                    "missing_columns": ", ".join(missing) or "—",
+                    "extra_columns": ", ".join(extra) or "—",
                 }
             )
-        issues = [r for r in results if r["missing"] != "—"]
+        issues = [
+            r
+            for r in results
+            if r["missing_columns"] != "—"
+            or r["extra_columns"] != "—"
+            or r["table_present"] == "No"
+        ]
         if not issues:
             st.success("✅ DB schema matches docs/DB_SCHEMA_TRUTH.md")
         else:

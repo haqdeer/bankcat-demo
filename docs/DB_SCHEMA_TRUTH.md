@@ -15,7 +15,7 @@ This file defines the expected column names per table for schema verification.
 - id
 - client_id
 - bank_name
-- account_number_masked
+- account_masked
 - account_type
 - currency
 - opening_balance
@@ -87,11 +87,11 @@ This file defines the expected column names per table for schema verification.
 ## vendor_memory
 - id
 - client_id
-- vendor_name
-- category_name
+- vendor_key
+- category
 - confidence
-- times_used
-- updated_at
+- times_confirmed
+- last_seen
 
 ## keyword_model
 - id
@@ -100,3 +100,4 @@ This file defines the expected column names per table for schema verification.
 - category
 - weight
 - times_used
+- updated_at

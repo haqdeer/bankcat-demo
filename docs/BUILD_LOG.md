@@ -339,3 +339,26 @@
 
 ### Next
 - Dashboard: P&L + Accuracy metrics from commits + committed data
+## 2026-01-26
+### What we built
+- Simplified sidebar navigation to a single accordion-style Companies/Setup section and restored bank masked account handling.
+- Updated schema verification to compare doc truth vs live tables/columns, and aligned schema docs with Supabase columns.
+- Added the BankCat logo to the Home page.
+
+### Why
+- Remove duplicated navigation, fix bank editing/display regressions, and eliminate false schema mismatch warnings.
+
+### Files changed
+- app.py
+- src/crud.py
+- src/engine.py
+- src/schema.py
+- docs/DB_SCHEMA_TRUTH.md
+- docs/BUILD_LOG.md
+- assets/bankcat-logo.svg
+
+### Tests done
+- Not run (UI change only).
+
+### Result
+- Pending manual verification.

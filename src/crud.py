@@ -68,7 +68,7 @@ def list_banks(client_id: int, include_inactive: bool = False) -> List[dict]:
 
 def add_bank(client_id: int, bank_name: str, account_type: str, currency: str = "", masked: str = "", opening_balance: Optional[float] = None) -> int:
     rows = _q("""
-        INSERT INTO banks(client_id, bank_name, account_type, currency, account_number_masked, opening_balance)
+        INSERT INTO banks(client_id, bank_name, account_type, currency, account_masked, opening_balance)
         VALUES (:cid,:bn,:at,:cur,:m,:ob)
         RETURNING id;
     """, {"cid": client_id, "bn": bank_name, "at": account_type, "cur": currency, "m": masked, "ob": opening_balance})
@@ -90,7 +90,7 @@ def update_bank(
     _exec("""
         UPDATE banks
         SET bank_name=:bn,
-            account_number_masked=:m,
+            account_masked=:m,
             account_type=:at,
             currency=:cur,
             opening_balance=COALESCE(:ob, opening_balance)
@@ -160,6 +160,16 @@ def list_table_columns(table_name: str) -> List[str]:
     return [r["column_name"] for r in rows]
 
 
+def list_tables() -> List[str]:
+    rows = _q("""
+        SELECT table_name
+        FROM information_schema.tables
+        WHERE table_schema='public' AND table_type='BASE TABLE'
+        ORDER BY table_name;
+    """)
+    return [r["table_name"] for r in rows]
+
+
 def update_category(cat_id: int, name: str, typ: str, nature: str) -> None:
     _exec("""
         UPDATE categories
@@ -171,29 +181,33 @@ def update_category(cat_id: int, name: str, typ: str, nature: str) -> None:
 
 
 # ---------------- Vendor memory + Keyword model ----------------
+def _normalize_vendor_key(vendor: str) -> str:
+    return (vendor or "").strip().lower()
+
+
 def list_vendor_memory(client_id: int) -> List[dict]:
     return _q("""
-        SELECT vendor_name, category_name, confidence, times_used
+        SELECT vendor_key, category, confidence, times_confirmed, last_seen
         FROM vendor_memory
         WHERE client_id=:cid
-        ORDER BY confidence DESC, times_used DESC, vendor_name ASC;
+        ORDER BY confidence DESC, times_confirmed DESC, vendor_key ASC;
     """, {"cid": client_id})
 
 
 def _upsert_vendor_memory(client_id: int, vendor: str, category: str, delta_conf: float = 0.03):
-    vendor = (vendor or "").strip()
-    if not vendor:
+    vendor_key = _normalize_vendor_key(vendor)
+    if not vendor_key:
         return
     _exec("""
-        INSERT INTO vendor_memory(client_id, vendor_name, category_name, confidence, times_used)
-        VALUES (:cid,:v,:c,0.70,1)
-        ON CONFLICT (client_id, vendor_name)
+        INSERT INTO vendor_memory(client_id, vendor_key, category, confidence, times_confirmed, last_seen)
+        VALUES (:cid,:v,:c,0.70,1,now())
+        ON CONFLICT (client_id, vendor_key)
         DO UPDATE SET
-            category_name = EXCLUDED.category_name,
-            times_used = vendor_memory.times_used + 1,
+            category = EXCLUDED.category,
+            times_confirmed = vendor_memory.times_confirmed + 1,
             confidence = LEAST(0.9999, vendor_memory.confidence + :dc),
-            updated_at = now();
-    """, {"cid": client_id, "v": vendor, "c": category, "dc": delta_conf})
+            last_seen = now();
+    """, {"cid": client_id, "v": vendor_key, "c": category, "dc": delta_conf})
 
 
 def _upsert_keyword_weight(client_id: int, token: str, category: str, delta: float):
@@ -201,12 +215,13 @@ def _upsert_keyword_weight(client_id: int, token: str, category: str, delta: flo
     if not token or len(token) < 3:
         return
     _exec("""
-        INSERT INTO keyword_model(client_id, token, category, weight, times_used)
-        VALUES (:cid,:t,:c,:w,1)
+        INSERT INTO keyword_model(client_id, token, category, weight, times_used, updated_at)
+        VALUES (:cid,:t,:c,:w,1,now())
         ON CONFLICT (client_id, token, category)
         DO UPDATE SET
             weight = keyword_model.weight + EXCLUDED.weight,
-            times_used = keyword_model.times_used + 1;
+            times_used = keyword_model.times_used + 1,
+            updated_at = now();
     """, {"cid": client_id, "t": token, "c": category, "w": float(delta)})
 
 
@@ -311,7 +326,7 @@ def process_suggestions(client_id: int, bank_id: int, period: str, bank_account_
     fallback_income = cat_names_income[0] if cat_names_income else "Income"
     fallback_exp = cat_names_exp[0] if cat_names_exp else "Expense"
 
-    vm = {v["vendor_name"].lower(): v for v in list_vendor_memory(client_id)}
+    vm = {v["vendor_key"]: v for v in list_vendor_memory(client_id)}
     kw = keyword_weights(client_id)
     # build token -> best category
     token_best: Dict[str, Tuple[str, float]] = {}
@@ -339,9 +354,10 @@ def process_suggestions(client_id: int, bank_id: int, period: str, bank_account_
         reason = "Heuristic"
 
         # 1) vendor memory match
-        if vendor_guess and vendor_guess.lower() in vm:
-            suggested_cat = vm[vendor_guess.lower()]["category_name"]
-            confidence = float(vm[vendor_guess.lower()]["confidence"])
+        vendor_key = _normalize_vendor_key(vendor_guess)
+        if vendor_key and vendor_key in vm:
+            suggested_cat = vm[vendor_key]["category"]
+            confidence = float(vm[vendor_key]["confidence"])
             reason = "Vendor memory"
         else:
             # 2) keyword weight
