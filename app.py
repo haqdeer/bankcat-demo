@@ -257,7 +257,7 @@ def _select_bank(banks_active: list[dict]) -> tuple[int, dict]:
 
 
 def render_home():
-    logo_path = ROOT / "assets" / "bankcat-logo.svg"
+    logo_path = ROOT / "assets" / "bankcat-logo.jpeg"
     if logo_path.exists():
         col_left, col_center, col_right = st.columns([1, 4, 1])
         with col_center:
