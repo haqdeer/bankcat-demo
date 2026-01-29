@@ -1,4 +1,4 @@
-# app.py - COMPLETE FIXED VERSION
+# app.py - COMPLETE FIXED VERSION WITH ☰ BUTTON
 import io
 import sys
 import calendar
@@ -178,7 +178,7 @@ def _run_schema_check() -> dict[str, object]:
 
 # ---------------- Session State Initialization ----------------
 def init_session_state():
-    """Initialize all session state variables - IMPROVED STATE MANAGEMENT"""
+    """Initialize all session state variables"""
     defaults = {
         "active_page": st.session_state.get("nav_page", "Home"),
         "active_subpage": None,
@@ -207,7 +207,6 @@ def init_session_state():
         if key not in st.session_state:
             st.session_state[key] = default_value
     
-    # Set subpage defaults based on page
     if st.session_state.active_page == "Companies" and not st.session_state.active_subpage:
         st.session_state.active_subpage = "List"
     if st.session_state.active_page == "Setup" and not st.session_state.active_subpage:
@@ -231,46 +230,24 @@ logo_uri = _logo_data_uri(logo_path)
 st.markdown(
     f"""
 <style>
-/* ONLY hide footer aur main menu */
 #MainMenu,
 footer {{
     display: none;
 }}
 
-/* STREAMLIT KE DEFAULT BUTTONS SHOW KARO */
-[data-testid="stHeader"] {{
-    display: block !important;
-    background: transparent !important;
-    height: 0 !important;
-    padding: 0 !important;
-}}
-
+/* Streamlit ke 3-dots button show karo */
 [data-testid="stToolbar"] {{
     display: block !important;
 }}
 
-[data-testid="stDecoration"] {{
-    display: block !important;
-}}
-
-/* SIDEBAR - Header ke neeche position */
+/* Sidebar ko header ke neeche rako */
 [data-testid="stSidebar"] {{
     top: 64px !important;
     height: calc(100vh - 64px) !important;
-    display: block !important;
-    visibility: visible !important;
-    opacity: 1 !important;
-}}
-/* Streamlit ke collapse button ko show karo aur position fix karo */
-[data-testid="stSidebarCollapseButton"] {{
-    display: block !important;
-    top: 20px !important;
-    left: 20px !important;
-    z-index: 1002;
 }}
 
-/* Header ke andar se ☰ button hide karo */
-.bankcat-header__left button.bankcat-header__btn {{
+/* Streamlit ka chhupa hua ☰ button hide karo */
+[data-testid="stSidebarCollapseButton"] {{
     display: none !important;
 }}
 
@@ -281,14 +258,6 @@ footer {{
 
 [data-testid="stAppViewContainer"] > .main {{
     padding-top: 5rem;
-}}
-
-/* SHOW STREAMLIT DEFAULT HEADER */
-[data-testid="stHeader"] {{
-    display: block !important;
-    background: transparent !important;
-    height: 0 !important;
-    padding: 0 !important;
 }}
 
 /* Fix main content position */
@@ -356,7 +325,7 @@ footer {{
 
 <div class="bankcat-header">
   <div class="bankcat-header__section bankcat-header__left">
-    <!-- ☰ button REMOVED - Streamlit ka native collapse button use hoga -->
+    <button class="bankcat-header__btn" onclick="toggleStreamlitSidebar()" id="sidebar-toggle-btn">☰</button>
     <img class="bankcat-header__logo" src="{logo_uri}" alt="BankCat logo" />
   </div>
   <div class="bankcat-header__section bankcat-header__middle">
@@ -375,7 +344,26 @@ footer {{
 </div>
 
 <script>
-// Fullscreen toggle only
+// ☰ button ka kaam
+function toggleStreamlitSidebar() {{
+    // Streamlit ke chhupay button ko click karo
+    const streamlitBtn = document.querySelector('[data-testid="stSidebarCollapseButton"] button');
+    if (streamlitBtn) {{
+        streamlitBtn.click();
+        // Button text change karo
+        const toggleBtn = document.getElementById('sidebar-toggle-btn');
+        if (toggleBtn) {{
+            const sidebar = document.querySelector('[data-testid="stSidebar"]');
+            if (sidebar && sidebar.getAttribute('aria-expanded') === 'false') {{
+                toggleBtn.innerHTML = '☰'; // Open icon
+            }} else {{
+                toggleBtn.innerHTML = '✕'; // Close icon
+            }}
+        }}
+    }}
+}}
+
+// Fullscreen
 function toggleFullscreen() {{
   if (!document.fullscreenElement) {{
     document.documentElement.requestFullscreen();
@@ -383,6 +371,30 @@ function toggleFullscreen() {{
     document.exitFullscreen();
   }}
 }}
+
+// Sidebar state track karo
+document.addEventListener('DOMContentLoaded', function() {{
+    const observer = new MutationObserver(function(mutations) {{
+        mutations.forEach(function(mutation) {{
+            if (mutation.attributeName === 'aria-expanded') {{
+                const toggleBtn = document.getElementById('sidebar-toggle-btn');
+                if (toggleBtn) {{
+                    const sidebar = document.querySelector('[data-testid="stSidebar"]');
+                    if (sidebar && sidebar.getAttribute('aria-expanded') === 'false') {{
+                        toggleBtn.innerHTML = '☰'; // Sidebar closed
+                    }} else {{
+                        toggleBtn.innerHTML = '✕'; // Sidebar open
+                    }}
+                }}
+            }}
+        }});
+    }});
+    
+    const sidebar = document.querySelector('[data-testid="stSidebar"]');
+    if (sidebar) {{
+        observer.observe(sidebar, {{ attributes: true }});
+    }}
+}});
 </script>
     """,
     unsafe_allow_html=True,
@@ -427,7 +439,7 @@ with st.sidebar:
     ):
         _set_active_page("Companies", "List")
 
-    # Setup - EXPANDABLE (as requested)
+    # Setup - EXPANDABLE
     setup_chevron = "▾" if st.session_state.sidebar_setup_open else "▸"
     setup_active = st.session_state.active_page == "Setup"
     if st.button(
@@ -562,7 +574,6 @@ def render_dashboard():
             # 1. Income vs Expense summary
             st.subheader("💰 Income vs Expense")
             
-            # Convert to numeric (FIX FOR ERROR)
             df['debit'] = pd.to_numeric(df['debit'], errors='coerce').fillna(0)
             df['credit'] = pd.to_numeric(df['credit'], errors='coerce').fillna(0)
             
@@ -589,24 +600,19 @@ def render_dashboard():
             else:
                 st.info("No monthly data available")
                 
-            # 3. Top categories - FIXED ERROR HERE
+            # 3. Top categories
             st.subheader("🏷️ Top Expense Categories")
             expenses = df[df['debit'] > 0]
             if not expenses.empty:
-                # Check if 'category' column exists before using it
                 if 'category' in expenses.columns:
                     expenses['category'] = expenses['category'].fillna('Uncategorized')
-                    # Convert debit to numeric if not already
                     expenses['debit'] = pd.to_numeric(expenses['debit'], errors='coerce').fillna(0)
                     
                     top_categories = expenses.groupby('category')['debit'].sum()
                     
-                    # Check if we have numeric data
                     if not top_categories.empty:
-                        # Get top 10 categories
                         top_categories = top_categories.sort_values(ascending=False).head(10)
                         if not top_categories.empty:
-                            # Create a simple bar chart
                             chart_data = pd.DataFrame({
                                 'Category': top_categories.index,
                                 'Amount': top_categories.values
@@ -617,7 +623,6 @@ def render_dashboard():
                     else:
                         st.info("No expense data available for chart")
                 else:
-                    # If category column doesn't exist, show info message
                     st.info("Category data not available in the selected transactions")
             else:
                 st.info("No expense data available")
@@ -765,7 +770,6 @@ def render_companies_list():
     
     st.subheader("Company List")
     
-    # Add Company button at top
     if st.button("➕ Add Company", type="primary"):
         st.session_state.active_subpage = "Add Company"
         st.rerun()
@@ -846,7 +850,7 @@ def render_companies_add():
                 cache_data.clear()
                 st.session_state.active_client_id = cid
                 st.session_state.active_client_name = name
-                st.session_state.active_subpage = "List"  # Go back to list
+                st.session_state.active_subpage = "List"
                 st.rerun()
             except Exception as e:
                 st.error(f"Create client failed ❌\n\n{_format_exc(e)}")
@@ -1109,7 +1113,6 @@ def render_setup_categories():
     if st.session_state.setup_categories_mode == "bulk_upload":
         st.markdown("#### Bulk Upload Categories (CSV)")
         
-        # ADD SAMPLE FILE DOWNLOAD
         sample_data = pd.DataFrame({
             'category_name': ['Office Supplies', 'Travel Expenses', 'Software Subscriptions'],
             'type': ['Expense', 'Expense', 'Expense'],
