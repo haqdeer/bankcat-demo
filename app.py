@@ -217,14 +217,18 @@ if "sidebar_collapsed" not in st.session_state:
 if "theme_mode" not in st.session_state:
     st.session_state.theme_mode = "light"
 
-if st.button("☰", key="sidebar_toggle", type="secondary"):
+action = st.query_params.get("action")
+if isinstance(action, list):
+    action = action[0] if action else None
+if action == "toggle_sidebar":
     st.session_state.sidebar_collapsed = not st.session_state.sidebar_collapsed
+    st.query_params.clear()
     st.rerun()
-
-if st.button("🌓", key="theme_toggle", type="secondary"):
+elif action == "toggle_theme":
     st.session_state.theme_mode = (
         "dark" if st.session_state.theme_mode == "light" else "light"
     )
+    st.query_params.clear()
     st.rerun()
 
 logo_uri = _logo_data_uri(logo_path)
@@ -237,37 +241,9 @@ st.markdown(
 [data-testid="stToolbar"],
 [data-testid="stHeader"] {{
     z-index: 5000 !important;
-}}
-div[data-testid="stButton"][data-key="sidebar_toggle"] {{
-    position: fixed;
-    top: 52px;
-    left: 18px;
-    z-index: 3000;
-}}
-div[data-testid="stButton"][data-key="sidebar_toggle"] button {{
-    background: transparent;
-    border: none;
-    box-shadow: none;
-    font-size: 20px;
-    padding: 4px 8px;
-}}
-div[data-testid="stButton"][data-key="theme_toggle"] {{
-    position: fixed;
-    top: 52px;
-    right: 160px;
-    z-index: 3000;
-}}
-div[data-testid="stButton"][data-key="theme_toggle"] button {{
-    background: transparent;
-    border: none;
-    box-shadow: none;
-    font-size: 18px;
-    padding: 4px 8px;
-}}
-body.bankcat-sidebar-collapsed [data-testid="stSidebar"] {{
-    margin-left: -260px;
-    width: 0;
-    min-width: 0;
+    position: fixed !important;
+    top: 0 !important;
+    right: 0 !important;
 }}
 body.bankcat-sidebar-collapsed [data-testid="stAppViewContainer"] > .main {{
     margin-left: 0 !important;
@@ -276,8 +252,8 @@ body.bankcat-sidebar-collapsed [data-testid="stAppViewContainer"] > .main {{
 [data-testid="stSidebar"] {{
     width: 240px;
     min-width: 240px;
-    top: calc(64px + 40px);
-    height: calc(100vh - 64px - 40px);
+    top: 64px;
+    height: calc(100vh - 64px);
     background: #ffffff;
     z-index: 900;
     transition: margin-left 0.2s ease, width 0.2s ease;
@@ -288,6 +264,9 @@ body.bankcat-sidebar-collapsed [data-testid="stAppViewContainer"] > .main {{
 }}
 [data-testid="stAppViewContainer"] > .main {{
     padding-top: calc(5rem + 40px);
+}}
+.block-container {{
+    padding-top: 80px !important;
 }}
 [data-testid="stSidebar"] button[data-testid="baseButton-primary"] {{
     background: #0f9d58;
@@ -321,7 +300,8 @@ body.bankcat-sidebar-collapsed [data-testid="stAppViewContainer"] > .main {{
     height: 64px;
     display: flex;
     align-items: center;
-    z-index: 2000;
+    z-index: 1000;
+    padding-right: 220px;
     box-shadow: 0 2px 6px rgba(0,0,0,0.08);
 }}
 .bankcat-header__section {{
@@ -408,6 +388,33 @@ body.bankcat-dark textarea {{
     unsafe_allow_html=True,
 )
 
+def render_header(current_title: str) -> None:
+    st.markdown(
+        f"""
+<div class="bankcat-header">
+  <div class="bankcat-header__section bankcat-header__left">
+    <a class="bankcat-header__btn" href="?action=toggle_sidebar" aria-label="Toggle sidebar">☰</a>
+    <img class="bankcat-header__logo" src="{logo_uri}" alt="BankCat logo" />
+  </div>
+  <div class="bankcat-header__section bankcat-header__middle">
+    <span class="bankcat-header__title">{current_title}</span>
+  </div>
+  <div class="bankcat-header__section bankcat-header__right">
+    <a class="bankcat-header__btn" href="?action=toggle_theme" aria-label="Theme">🌓</a>
+    <a class="bankcat-header__btn" href="#fullscreen" aria-label="Fullscreen">⛶</a>
+    <span class="bankcat-header__btn" aria-label="Notifications">🔔</span>
+    <select aria-label="User menu">
+      <option>Admin</option>
+      <option>Profile</option>
+      <option>Sign out</option>
+    </select>
+  </div>
+</div>
+        """,
+        unsafe_allow_html=True,
+    )
+
+
 if st.session_state.theme_mode == "dark":
     st.markdown(
         """
@@ -459,7 +466,7 @@ if st.session_state.sidebar_collapsed:
         """
 <style>
 [data-testid="stSidebar"] {
-    display: none;
+    display: none !important;
 }
 [data-testid="stAppViewContainer"] > .main {
     margin-left: 0 !important;
@@ -470,30 +477,7 @@ if st.session_state.sidebar_collapsed:
         unsafe_allow_html=True,
     )
 
-st.markdown(
-    f"""
-<div class="bankcat-header">
-  <div class="bankcat-header__section bankcat-header__left">
-    <span class="bankcat-header__btn">☰</span>
-    <img class="bankcat-header__logo" src="{logo_uri}" alt="BankCat logo" />
-  </div>
-  <div class="bankcat-header__section bankcat-header__middle">
-    <span class="bankcat-header__title">{page_title}</span>
-  </div>
-  <div class="bankcat-header__section bankcat-header__right">
-    <span class="bankcat-header__btn">🌓</span>
-    <span class="bankcat-header__btn">⛶</span>
-    <span class="bankcat-header__btn">🔔</span>
-    <select aria-label="User menu">
-      <option>Admin</option>
-      <option>Profile</option>
-      <option>Sign out</option>
-    </select>
-  </div>
-</div>
-    """,
-    unsafe_allow_html=True,
-)
+render_header(page_title)
 
 components.html(
     """
@@ -705,10 +689,6 @@ def _select_bank(banks_active: list[dict]) -> tuple[int, dict]:
 
 
 def render_home():
-    if logo_path.exists():
-        col_left, col_center, col_right = st.columns([1, 4, 1])
-        with col_center:
-            st.image(str(logo_path), width=520)
     clients = cached_clients()
     _select_active_client(clients)
     st.markdown("**BankCat Demo**")

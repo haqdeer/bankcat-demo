@@ -1,6 +1,6 @@
 ## 2026-01-26
 ### What we built
-- Restored the custom header layout while fixing sidebar/theme toggles via session state and a fullscreen overlay button.
+- Restored the custom header layout at top:0 and moved sidebar/theme toggles into header links with query-parameter actions.
 - Added a text-based SVG loader asset and loader helper for heavy actions with emoji fallback when no asset is present.
 - Updated DB_SCHEMA_TRUTH.md to match the latest schema columns.
 
