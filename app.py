@@ -1,4 +1,4 @@
-# app.py - COMPLETE FIXED VERSION WITH ☰ BUTTON
+# app.py - SIMPLIFIED VERSION - NO CUSTOM HEADER
 import io
 import sys
 import calendar
@@ -215,7 +215,7 @@ def init_session_state():
 
 init_session_state()
 
-# ---------------- Header & Sidebar ----------------
+# ---------------- Page Title & Logo ----------------
 active_page = st.session_state.active_page
 active_subpage = st.session_state.active_subpage
 page_title = active_page
@@ -225,182 +225,46 @@ elif active_page == "Setup" and active_subpage:
     page_title = f"Setup > {active_subpage}"
 
 logo_path = ROOT / "assets" / "bankcat-logo.jpeg"
-logo_uri = _logo_data_uri(logo_path)
 
+# Show small logo in main area (top-left)
+if logo_path.exists():
+    col1, col2 = st.columns([1, 10])
+    with col1:
+        st.image(str(logo_path), width=40)
+    with col2:
+        st.title(page_title)
+else:
+    st.title(page_title)
+
+# Custom CSS for sidebar logo
 st.markdown(
-    f"""
+    """
 <style>
-#MainMenu,
-footer {{
-    display: none;
-}}
+/* Sidebar logo styling */
+.sidebar-logo {
+    text-align: center;
+    padding: 1rem 0;
+    margin-bottom: 1rem;
+    border-bottom: 1px solid #e5e7eb;
+}
 
-/* Streamlit ke 3-dots button show karo */
-[data-testid="stToolbar"] {{
-    display: block !important;
-}}
-
-/* Sidebar ko header ke neeche rako */
-[data-testid="stSidebar"] {{
-    top: 64px !important;
-    height: calc(100vh - 64px) !important;
-}}
-
-/* Streamlit ka chhupa hua ☰ button hide karo */
-[data-testid="stSidebarCollapseButton"] {{
-    display: none !important;
-}}
-
-[data-testid="stSidebar"] .block-container {{
-    padding-top: 1rem;
-    padding-bottom: 0.75rem;
-}}
-
-[data-testid="stAppViewContainer"] > .main {{
-    padding-top: 5rem;
-}}
-
-/* Fix main content position */
-[data-testid="stAppViewContainer"] {{
-    padding-top: 64px !important;
-}}
-
-.bankcat-header {{
-    position: fixed;
-    top: 0;
-    left: 0;
-    right: 0;
-    height: 64px;
-    display: flex;
-    align-items: center;
-    z-index: 1001;
-    box-shadow: 0 2px 6px rgba(0,0,0,0.08);
-    background: white;
-}}
-
-.bankcat-header__section {{
-    height: 100%;
-    display: flex;
-    align-items: center;
-    gap: 12px;
-    padding: 0 18px;
-}}
-.bankcat-header__left {{
-    background: #ffffff;
-    flex: 0 0 34%;
-}}
-.bankcat-header__middle {{
-    background: #0f9d58;
-    flex: 1;
-    justify-content: center;
-    color: #ffffff;
-}}
-.bankcat-header__right {{
-    background: #ffffff;
-    flex: 0 0 28%;
-    justify-content: flex-end;
-}}
-.bankcat-header__logo {{
-    height: 38px;
-}}
-.bankcat-header__btn {{
-    background: transparent;
-    border: none;
-    color: inherit;
-    font-size: 18px;
-    cursor: pointer;
-    padding: 8px;
-}}
-.bankcat-header__title {{
-    font-size: 20px;
-    font-weight: 700;
-    letter-spacing: 0.2px;
-}}
-.bankcat-header__right select {{
-    border-radius: 16px;
-    padding: 6px 10px;
-    border: 1px solid #e5e7eb;
-}}
+.sidebar-logo img {
+    max-width: 120px;
+    height: auto;
+}
 </style>
-
-<div class="bankcat-header">
-  <div class="bankcat-header__section bankcat-header__left">
-    <button class="bankcat-header__btn" onclick="toggleStreamlitSidebar()" id="sidebar-toggle-btn">☰</button>
-    <img class="bankcat-header__logo" src="{logo_uri}" alt="BankCat logo" />
-  </div>
-  <div class="bankcat-header__section bankcat-header__middle">
-    <span class="bankcat-header__title">{page_title}</span>
-  </div>
-  <div class="bankcat-header__section bankcat-header__right">
-    <button class="bankcat-header__btn" aria-label="Theme">🌓</button>
-    <button class="bankcat-header__btn" onclick="toggleFullscreen()" aria-label="Fullscreen">⛶</button>
-    <button class="bankcat-header__btn" aria-label="Notifications">🔔</button>
-    <select aria-label="User menu">
-      <option>Admin</option>
-      <option>Profile</option>
-      <option>Sign out</option>
-    </select>
-  </div>
-</div>
-
-<script>
-// ☰ button ka kaam
-function toggleStreamlitSidebar() {{
-    // Streamlit ke chhupay button ko click karo
-    const streamlitBtn = document.querySelector('[data-testid="stSidebarCollapseButton"] button');
-    if (streamlitBtn) {{
-        streamlitBtn.click();
-        // Button text change karo
-        const toggleBtn = document.getElementById('sidebar-toggle-btn');
-        if (toggleBtn) {{
-            const sidebar = document.querySelector('[data-testid="stSidebar"]');
-            if (sidebar && sidebar.getAttribute('aria-expanded') === 'false') {{
-                toggleBtn.innerHTML = '☰'; // Open icon
-            }} else {{
-                toggleBtn.innerHTML = '✕'; // Close icon
-            }}
-        }}
-    }}
-}}
-
-// Fullscreen
-function toggleFullscreen() {{
-  if (!document.fullscreenElement) {{
-    document.documentElement.requestFullscreen();
-  }} else {{
-    document.exitFullscreen();
-  }}
-}}
-
-// Sidebar state track karo
-document.addEventListener('DOMContentLoaded', function() {{
-    const observer = new MutationObserver(function(mutations) {{
-        mutations.forEach(function(mutation) {{
-            if (mutation.attributeName === 'aria-expanded') {{
-                const toggleBtn = document.getElementById('sidebar-toggle-btn');
-                if (toggleBtn) {{
-                    const sidebar = document.querySelector('[data-testid="stSidebar"]');
-                    if (sidebar && sidebar.getAttribute('aria-expanded') === 'false') {{
-                        toggleBtn.innerHTML = '☰'; // Sidebar closed
-                    }} else {{
-                        toggleBtn.innerHTML = '✕'; // Sidebar open
-                    }}
-                }}
-            }}
-        }});
-    }});
-    
-    const sidebar = document.querySelector('[data-testid="stSidebar"]');
-    if (sidebar) {{
-        observer.observe(sidebar, {{ attributes: true }});
-    }}
-}});
-</script>
-    """,
+""",
     unsafe_allow_html=True,
 )
 
+# ---------------- Sidebar Content ----------------
 with st.sidebar:
+    # Add logo to sidebar top
+    if logo_path.exists():
+        st.markdown('<div class="sidebar-logo">', unsafe_allow_html=True)
+        st.image(str(logo_path), width=120)
+        st.markdown('</div>', unsafe_allow_html=True)
+    
     st.markdown("### Navigation")
     
     def _set_active_page(page: str, subpage: str | None = None) -> None:
@@ -533,11 +397,6 @@ def _select_bank(banks_active: list[dict]) -> tuple[int, dict]:
 
 # ---------------- Page Render Functions ----------------
 def render_home():
-    if logo_path.exists():
-        col_left, col_center, col_right = st.columns([1, 4, 1])
-        with col_center:
-            st.image(str(logo_path), width=520)
-    
     clients = cached_clients()
     _select_active_client(clients)
     
@@ -547,7 +406,7 @@ def render_home():
 
 
 def render_dashboard():
-    st.title("📊 Financial Dashboard")
+    st.markdown("## 📊 Financial Dashboard")
     
     client_id = _require_active_client()
     if not client_id:
@@ -635,6 +494,7 @@ def render_dashboard():
 
 
 def render_reports():
+    st.markdown("## 📊 Reports")
     client_id = _require_active_client()
     if not client_id:
         return
@@ -768,7 +628,7 @@ def render_companies_list():
     client_id = st.session_state.active_client_id
     clients = cached_clients()
     
-    st.subheader("Company List")
+    st.markdown("## 🏢 Companies")
     
     if st.button("➕ Add Company", type="primary"):
         st.session_state.active_subpage = "Add Company"
@@ -832,7 +692,7 @@ def render_companies_list():
 
 
 def render_companies_add():
-    st.subheader("Add Company")
+    st.markdown("## 🏢 Companies > Add Company")
     
     name = st.text_input("Company Name *", key="add_client_name")
     industry = st.text_input("Industry", key="add_client_industry")
@@ -874,6 +734,8 @@ def render_companies():
 
 
 def render_setup_banks():
+    st.markdown("## 🛠️ Setup > Banks")
+    
     client_id = _require_active_client()
     if not client_id:
         return
@@ -1006,6 +868,8 @@ def render_setup_banks():
 
 
 def render_setup_categories():
+    st.markdown("## 🛠️ Setup > Categories")
+    
     client_id = _require_active_client()
     if not client_id:
         return
@@ -1177,6 +1041,8 @@ def render_setup():
 
 
 def render_categorisation():
+    st.markdown("## 🧠 Categorisation")
+    
     client_id = _require_active_client()
     if not client_id:
         return
@@ -1615,6 +1481,8 @@ def render_mapping_section(
 
 
 def render_settings():
+    st.markdown("## ⚙️ Settings")
+    
     st.markdown("### Utilities")
     if st.button("Test DB Connection"):
         try:
