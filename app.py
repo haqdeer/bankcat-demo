@@ -300,7 +300,7 @@ with st.sidebar:
     # Add logo to sidebar top (سینٹر میں)
     if logo_path.exists():
         st.markdown('<div class="sidebar-logo">', unsafe_allow_html=True)
-        st.image(str(logo_path), width=100)
+        st.image(str(logo_path), width=220)
         st.markdown('</div>', unsafe_allow_html=True)
     
     st.markdown("### Navigation")
