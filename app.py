@@ -465,26 +465,26 @@ with st.sidebar:
         st.session_state.sidebar_setup_open = False
         _set_active_page("Companies", "List")
 
-    # Setup - SIMPLE BUTTON (NOT EXPANDABLE)
-    setup_active = st.session_state.active_page == "Setup"
-    if st.button(
-        "🛠️ Setup",
-        use_container_width=True,
-        key="nav_setup",
-        type=_button_type(setup_active),
-    ):
-        st.session_state.sidebar_setup_open = False
-        st.session_state.sidebar_companies_open = False
-        _set_active_page("Setup", "Banks")
+# Setup - SIMPLE BUTTON (NOT EXPANDABLE)
+setup_active = st.session_state.active_page == "Setup"
+if st.button(
+    "🛠️ Setup",
+    use_container_width=True,
+    key="nav_setup",
+    type=_button_type(setup_active),
+):
+    st.session_state.sidebar_setup_open = False
+    st.session_state.sidebar_companies_open = False
+    _set_active_page("Setup", "Banks")
 
-    # Export section added
-    st.markdown("---")
-    st.markdown("### 📤 Export")
-    if st.button("Export Transactions", use_container_width=True):
-        if st.session_state.active_client_id:
-            st.info("Export feature will be implemented here")
-        else:
-            st.warning("Select a company first")
+# Export section added
+st.markdown("---")
+st.markdown("### 📤 Export")
+if st.button("Export Transactions", use_container_width=True):
+    if st.session_state.active_client_id:
+        st.info("Export feature will be implemented here")
+    else:
+        st.warning("Select a company first")
 
 
 # ---------------- Helper Functions ----------------
@@ -891,7 +891,6 @@ def render_companies():
 
 
 def render_setup_banks():
-    client_id = _require_active_client()
     if not client_id:
         return
 
@@ -1023,7 +1022,6 @@ def render_setup_banks():
 
 
 def render_setup_categories():
-    client_id = _require_active_client()
     if not client_id:
         return
 
@@ -1187,11 +1185,20 @@ def render_setup_categories():
 
 
 def render_setup():
-    if st.session_state.active_subpage == "Banks":
+    """Setup page with Banks and Categories tabs"""
+    client_id = _require_active_client()
+    if not client_id:
+        st.warning("Select a company first.")
+        return
+    
+    # Create tabs
+    tab1, tab2 = st.tabs(["🏦 Banks", "🏷️ Categories"])
+    
+    with tab1:
         render_setup_banks()
-    else:
+    
+    with tab2:
         render_setup_categories()
-
 
 def render_categorisation():
     client_id = _require_active_client()
