@@ -219,34 +219,55 @@ init_session_state()
 st.markdown(
     """
 <style>
-/* Sidebar logo styling */
+/* Sidebar logo styling - TIGHT ALIGNMENT */
 .sidebar-logo {
     text-align: center;
-    padding-top: 1rem;
-    padding-bottom: 1rem;
-    margin-bottom: 1rem;
+    padding-top: 0.5rem;
+    padding-bottom: 0.5rem;
+    margin-bottom: 0.75rem;
     border-bottom: 1px solid #e5e7eb;
     display: flex;
     justify-content: center;
     align-items: center;
 }
 
-/* Home page logo styling */
+/* Home page logo styling - MINIMAL SPACING */
 .home-logo-container {
     text-align: center;
-    margin: 2rem auto;
-    padding: 2rem 0;
+    margin: 1rem auto;
+    padding: 0.5rem 0;
 }
 
 .home-logo-container img {
-    max-width: 250px;
+    max-width: 220px;
     height: auto;
     margin: 0 auto;
 }
 
 /* Page title styling */
 .page-title {
-    margin-top: 1rem;
+    margin-top: 0.75rem;
+}
+
+/* Reduce extra margins in sidebar */
+.block-container {
+    padding-top: 1rem !important;
+    padding-bottom: 1rem !important;
+}
+
+/* Remove extra space at top of sidebar */
+.css-1d391kg, .css-1544g2n {
+    padding-top: 0 !important;
+}
+
+/* Tight spacing for navigation */
+[data-testid="stSidebarNav"] + div {
+    padding-top: 0.25rem !important;
+}
+
+/* Home page content spacing */
+.main .block-container {
+    padding-top: 1rem !important;
 }
 </style>
 """,
@@ -267,7 +288,7 @@ logo_path = ROOT / "assets" / "bankcat-logo.jpeg"
 # فقط ہوم پیج پر لوگو دکھائیں
 if active_page == "Home" and logo_path.exists():
     st.markdown('<div class="home-logo-container">', unsafe_allow_html=True)
-    st.image(str(logo_path), width=500)
+    st.image(str(logo_path), width=220)
     st.markdown('</div>', unsafe_allow_html=True)
     # ہوم پیج پر الگ سے ٹائٹل نہیں دکھائیں گے
 else:
@@ -279,7 +300,7 @@ with st.sidebar:
     # Add logo to sidebar top (سینٹر میں)
     if logo_path.exists():
         st.markdown('<div class="sidebar-logo">', unsafe_allow_html=True)
-        st.image(str(logo_path), width=120)
+        st.image(str(logo_path), width=100)
         st.markdown('</div>', unsafe_allow_html=True)
     
     st.markdown("### Navigation")
