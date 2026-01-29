@@ -9,6 +9,7 @@ from pathlib import Path
 
 import pandas as pd
 import streamlit as st
+import streamlit.components.v1 as components
 
 ROOT = Path(__file__).resolve().parent
 if str(ROOT) not in sys.path:
@@ -66,9 +67,13 @@ REQUIRED_CRUD_APIS = (
     "list_table_columns",
     "list_tables",
     "drafts_summary",
+    "get_draft_summary",
+    "get_commit_summary",
     "insert_draft_rows",
     "process_suggestions",
     "load_draft",
+    "load_draft_rows",
+    "load_committed_rows",
     "save_review_changes",
     "commit_period",
     "committed_sample",
@@ -140,49 +145,148 @@ def _load_schema_truth(path: Path) -> dict[str, list[str]]:
     return truth
 
 
+def _run_schema_check() -> dict[str, object]:
+    truth_path = Path("docs/DB_SCHEMA_TRUTH.md")
+    if not truth_path.exists():
+        return {"error": "docs/DB_SCHEMA_TRUTH.md not found. Please add schema truth file."}
+    truth = _load_schema_truth(truth_path)
+    expected_tables = set(truth.keys())
+    actual_tables = set(crud.list_tables())
+    tables = sorted(expected_tables | actual_tables)
+    allowed_extra = {"updated_at"}
+    results = []
+    for table in tables:
+        expected = truth.get(table, [])
+        actual = crud.list_table_columns(table) if table in actual_tables else []
+        missing = [c for c in expected if c not in actual]
+        extra = [c for c in actual if c not in expected and c not in allowed_extra]
+        results.append(
+            {
+                "table": table,
+                "table_present": "Yes" if table in actual_tables else "No",
+                "missing_columns": ", ".join(missing) or "—",
+                "extra_columns": ", ".join(extra) or "—",
+            }
+        )
+    issues = [
+        r
+        for r in results
+        if r["missing_columns"] != "—"
+        or r["extra_columns"] != "—"
+        or r["table_present"] == "No"
+    ]
+    return {"issues": issues}
+
+
+def _get_loader_path() -> Path | None:
+    gif_path = ROOT / "assets" / "bankcat-loader.gif"
+    if gif_path.exists():
+        return gif_path
+    svg_path = ROOT / "assets" / "bankcat-loader.svg"
+    if svg_path.exists():
+        return svg_path
+    return None
+
+
 # ---------------- Sidebar Navigation ----------------
 logo_path = ROOT / "assets" / "bankcat-logo.jpeg"
-if not logo_path.exists():
-    logo_path = ROOT / "assets" / "bankcat-logo.svg"
+if "active_page" not in st.session_state:
+    st.session_state.active_page = st.session_state.get("nav_page", "Home")
+if "active_subpage" not in st.session_state:
+    legacy_subpage = None
+    if st.session_state.active_page == "Companies":
+        legacy_subpage = st.session_state.get("companies_tab", "List")
+    elif st.session_state.active_page == "Setup":
+        legacy_subpage = st.session_state.get("setup_tab", "Banks")
+    st.session_state.active_subpage = legacy_subpage
+if st.session_state.active_page == "Companies" and not st.session_state.active_subpage:
+    st.session_state.active_subpage = "List"
+if st.session_state.active_page == "Setup" and not st.session_state.active_subpage:
+    st.session_state.active_subpage = "Banks"
+
+active_page = st.session_state.active_page
+active_subpage = st.session_state.active_subpage
+page_title = active_page
+if active_page == "Companies" and active_subpage:
+    page_title = f"Companies > {active_subpage}"
+elif active_page == "Setup" and active_subpage:
+    page_title = f"Setup > {active_subpage}"
+
+if "sidebar_collapsed" not in st.session_state:
+    st.session_state.sidebar_collapsed = False
+if "theme_mode" not in st.session_state:
+    st.session_state.theme_mode = "light"
+
+action = st.query_params.get("action")
+if isinstance(action, list):
+    action = action[0] if action else None
+if action == "toggle_sidebar":
+    st.session_state.sidebar_collapsed = not st.session_state.sidebar_collapsed
+    st.query_params.clear()
+    st.rerun()
+elif action == "toggle_theme":
+    st.session_state.theme_mode = (
+        "dark" if st.session_state.theme_mode == "light" else "light"
+    )
+    st.query_params.clear()
+    st.rerun()
+
 logo_uri = _logo_data_uri(logo_path)
 st.markdown(
-    f"""
+    """
 <style>
-body.bankcat-sidebar-collapsed [data-testid="stSidebar"] {{
-    margin-left: -260px;
-    width: 0;
-    min-width: 0;
+[data-testid="stSidebarCollapseButton"] {{
+    display: none;
+}}
+[data-testid="stToolbar"],
+[data-testid="stHeader"] {{
+    z-index: 5000 !important;
+    position: fixed !important;
+    top: 0 !important;
+    right: 0 !important;
 }}
 [data-testid="stSidebar"] {{
     width: 240px;
     min-width: 240px;
+    top: 64px;
+    height: calc(100vh - 64px);
     background: #ffffff;
+    z-index: 900;
     transition: margin-left 0.2s ease, width 0.2s ease;
 }}
 [data-testid="stSidebar"] .block-container {{
-    padding-top: 4.5rem;
+    padding-top: 1rem;
     padding-bottom: 0.75rem;
 }}
 [data-testid="stAppViewContainer"] > .main {{
-    padding-top: 5rem;
+    padding-top: calc(5rem + 40px);
 }}
-[data-testid="stSidebar"] button {{
+.block-container {{
+    padding-top: 80px !important;
+}}
+[data-testid="stSidebar"] button[data-testid="baseButton-primary"] {{
     background: #0f9d58;
     color: #ffffff;
     border-radius: 10px;
     border: 1px solid #0f9d58;
     font-weight: 600;
 }}
-[data-testid="stSidebar"] button:hover {{
+[data-testid="stSidebar"] button[data-testid="baseButton-primary"]:hover {{
     background: #0c8048;
     border-color: #0c8048;
     color: #ffffff;
 }}
-[data-testid="stSidebar"] button:disabled {{
+[data-testid="stSidebar"] button[data-testid="baseButton-secondary"] {{
     background: #ffffff;
     color: #0f9d58;
     border: 1px solid #0f9d58;
-    opacity: 1;
+    border-radius: 10px;
+    font-weight: 600;
+}}
+[data-testid="stSidebar"] button[data-testid="baseButton-secondary"]:hover {{
+    background: #f3f4f6;
+    color: #0f9d58;
+    border: 1px solid #0f9d58;
 }}
 .bankcat-header {{
     position: fixed;
@@ -193,6 +297,7 @@ body.bankcat-sidebar-collapsed [data-testid="stSidebar"] {{
     display: flex;
     align-items: center;
     z-index: 1000;
+    padding-right: 220px;
     box-shadow: 0 2px 6px rgba(0,0,0,0.08);
 }}
 .bankcat-header__section {{
@@ -227,22 +332,10 @@ body.bankcat-sidebar-collapsed [data-testid="stSidebar"] {{
     font-size: 18px;
     cursor: pointer;
 }}
-.bankcat-search {{
-    display: flex;
-    align-items: center;
-    gap: 8px;
-}}
-.bankcat-search input {{
-    width: 0;
-    opacity: 0;
-    transition: width 0.2s ease, opacity 0.2s ease;
-    border-radius: 16px;
-    border: none;
-    padding: 6px 10px;
-}}
-.bankcat-search.expanded input {{
-    width: 220px;
-    opacity: 1;
+.bankcat-header__title {{
+    font-size: 20px;
+    font-weight: 700;
+    letter-spacing: 0.2px;
 }}
 .bankcat-header__right select {{
     border-radius: 16px;
@@ -250,21 +343,25 @@ body.bankcat-sidebar-collapsed [data-testid="stSidebar"] {{
     border: 1px solid #e5e7eb;
 }}
 </style>
+    """,
+    unsafe_allow_html=True,
+)
+
+def render_header(current_title: str) -> None:
+    st.markdown(
+        f"""
 <div class="bankcat-header">
   <div class="bankcat-header__section bankcat-header__left">
-    <button class="bankcat-header__btn" id="sidebar-toggle" aria-label="Toggle sidebar">☰</button>
+    <a class="bankcat-header__btn" href="?action=toggle_sidebar" aria-label="Toggle sidebar">☰</a>
     <img class="bankcat-header__logo" src="{logo_uri}" alt="BankCat logo" />
   </div>
   <div class="bankcat-header__section bankcat-header__middle">
-    <div class="bankcat-search" id="bankcat-search">
-      <button class="bankcat-header__btn" id="search-toggle" aria-label="Search">🔍</button>
-      <input type="text" placeholder="Search" />
-    </div>
-    <button class="bankcat-header__btn" aria-label="Theme">🌓</button>
-    <button class="bankcat-header__btn" id="fullscreen-toggle" aria-label="Fullscreen">⛶</button>
+    <span class="bankcat-header__title">{current_title}</span>
   </div>
   <div class="bankcat-header__section bankcat-header__right">
-    <button class="bankcat-header__btn" aria-label="Notifications">🔔</button>
+    <a class="bankcat-header__btn" href="?action=toggle_theme" aria-label="Theme">🌓</a>
+    <a class="bankcat-header__btn" href="#fullscreen" aria-label="Fullscreen">⛶</a>
+    <span class="bankcat-header__btn" aria-label="Notifications">🔔</span>
     <select aria-label="User menu">
       <option>Admin</option>
       <option>Profile</option>
@@ -272,35 +369,104 @@ body.bankcat-sidebar-collapsed [data-testid="stSidebar"] {{
     </select>
   </div>
 </div>
+        """,
+        unsafe_allow_html=True,
+    )
+
+
+if st.session_state.theme_mode == "dark":
+    st.markdown(
+        """
+<style>
+body {
+    background: #0f172a;
+    color: #e2e8f0;
+}
+[data-testid="stAppViewContainer"] {
+    background-color: #0f172a;
+}
+[data-testid="stSidebar"] {
+    background: #0b1220;
+}
+.bankcat-header__left,
+.bankcat-header__right {
+    background: #0b1220;
+    color: #e2e8f0;
+}
+.bankcat-header__middle {
+    background: #16a34a;
+}
+[data-testid="stSidebar"] button[data-testid="baseButton-primary"] {
+    background: #16a34a;
+    border-color: #16a34a;
+}
+[data-testid="stSidebar"] button[data-testid="baseButton-secondary"] {
+    background: #111827;
+    color: #e2e8f0;
+    border-color: #16a34a;
+}
+[data-testid="stSidebar"] button[data-testid="baseButton-secondary"]:hover {
+    background: #111827;
+}
+input,
+select,
+textarea {
+    background-color: #0b1220 !important;
+    color: #e2e8f0 !important;
+    border-color: #334155 !important;
+}
+</style>
+        """,
+        unsafe_allow_html=True,
+    )
+
+if st.session_state.sidebar_collapsed:
+    st.markdown(
+        """
+<style>
+[data-testid="stSidebar"] {
+    display: none !important;
+}
+[data-testid="stAppViewContainer"] > .main {
+    margin-left: 0 !important;
+    padding-left: 1rem;
+}
+</style>
+        """,
+        unsafe_allow_html=True,
+    )
+
+render_header(page_title)
+
+components.html(
+    """
+<div id="fullscreen-overlay" style="
+  position: fixed;
+  top: 52px;
+  right: 112px;
+  width: 28px;
+  height: 28px;
+  cursor: pointer;
+  z-index: 3001;
+  background: transparent;
+"></div>
 <script>
-const toggleSidebar = () => {{
-  document.body.classList.toggle('bankcat-sidebar-collapsed');
-}};
-const toggleSearch = () => {{
-  const search = document.getElementById('bankcat-search');
-  search.classList.toggle('expanded');
-}};
-const toggleFullscreen = () => {{
-  if (!document.fullscreenElement) {{
-    document.documentElement.requestFullscreen();
-  }} else {{
-    document.exitFullscreen();
-  }}
-}};
-document.getElementById('sidebar-toggle')?.addEventListener('click', toggleSidebar);
-document.getElementById('search-toggle')?.addEventListener('click', toggleSearch);
-document.getElementById('fullscreen-toggle')?.addEventListener('click', toggleFullscreen);
+  const overlay = document.getElementById('fullscreen-overlay');
+  if (overlay) {
+    overlay.addEventListener('click', () => {
+      if (!document.fullscreenElement) {
+        document.documentElement.requestFullscreen();
+      } else {
+        document.exitFullscreen();
+      }
+    });
+  }
 </script>
     """,
-    unsafe_allow_html=True,
+    height=0,
+    width=0,
 )
 
-if "nav_page" not in st.session_state:
-    st.session_state.nav_page = "Home"
-if "companies_subpage" not in st.session_state:
-    st.session_state.companies_subpage = "List"
-if "setup_subpage" not in st.session_state:
-    st.session_state.setup_subpage = "Banks"
 if "active_client_id" not in st.session_state:
     st.session_state.active_client_id = None
 if "active_client_name" not in st.session_state:
@@ -327,22 +493,26 @@ if "setup_categories_mode" not in st.session_state:
     st.session_state.setup_categories_mode = "list"
 if "setup_category_edit_id" not in st.session_state:
     st.session_state.setup_category_edit_id = None
-if "companies_tab" not in st.session_state:
-    st.session_state.companies_tab = "List"
-if "setup_tab" not in st.session_state:
-    st.session_state.setup_tab = "Banks"
 if "sidebar_companies_open" not in st.session_state:
     st.session_state.sidebar_companies_open = False
 if "sidebar_setup_open" not in st.session_state:
     st.session_state.sidebar_setup_open = False
-if st.session_state.nav_page == "Companies":
+if st.session_state.active_page == "Companies":
     st.session_state.sidebar_companies_open = True
-if st.session_state.nav_page == "Setup":
+if st.session_state.active_page == "Setup":
     st.session_state.sidebar_setup_open = True
 
 
 with st.sidebar:
     st.markdown("### Navigation")
+    def _set_active_page(page: str, subpage: str | None = None) -> None:
+        st.session_state.active_page = page
+        st.session_state.active_subpage = subpage
+        st.rerun()
+
+    def _button_type(is_active: bool) -> str:
+        return "secondary" if is_active else "primary"
+
     page_labels = {
         "Home": "🏠 Home",
         "Reports": "📊 Reports",
@@ -351,57 +521,78 @@ with st.sidebar:
         "Settings": "⚙️ Settings",
     }
     for page in ["Home", "Reports", "Dashboard", "Categorisation", "Settings"]:
+        is_active = st.session_state.active_page == page
         if st.button(
             page_labels[page],
             use_container_width=True,
             key=f"nav_{page}",
-            disabled=st.session_state.nav_page == page,
+            type=_button_type(is_active),
         ):
-            st.session_state.nav_page = page
             st.session_state.sidebar_companies_open = False
             st.session_state.sidebar_setup_open = False
+            _set_active_page(page, None)
 
     companies_chevron = "▾" if st.session_state.sidebar_companies_open else "▸"
+    companies_active = st.session_state.active_page == "Companies"
     if st.button(
         f"{companies_chevron} 🏢 Companies",
         use_container_width=True,
         key="toggle_companies",
-        disabled=st.session_state.nav_page == "Companies",
+        type=_button_type(companies_active),
     ):
-        st.session_state.sidebar_companies_open = not st.session_state.sidebar_companies_open
+        if companies_active:
+            st.session_state.sidebar_companies_open = not st.session_state.sidebar_companies_open
+            st.rerun()
+        else:
+            st.session_state.sidebar_companies_open = True
+            st.session_state.sidebar_setup_open = False
+            _set_active_page("Companies", "List")
     if st.session_state.sidebar_companies_open:
         for tab in ["List", "Change Company", "Add Company"]:
+            tab_active = (
+                st.session_state.active_page == "Companies"
+                and st.session_state.active_subpage == tab
+            )
             if st.button(
                 tab,
                 use_container_width=True,
                 key=f"companies_tab_{tab}",
-                disabled=st.session_state.nav_page == "Companies"
-                and st.session_state.companies_tab == tab,
+                type=_button_type(tab_active),
             ):
-                st.session_state.nav_page = "Companies"
-                st.session_state.companies_tab = tab
                 st.session_state.sidebar_companies_open = True
+                st.session_state.sidebar_setup_open = False
+                _set_active_page("Companies", tab)
 
     setup_chevron = "▾" if st.session_state.sidebar_setup_open else "▸"
+    setup_active = st.session_state.active_page == "Setup"
     if st.button(
         f"{setup_chevron} 🛠️ Setup",
         use_container_width=True,
         key="toggle_setup",
-        disabled=st.session_state.nav_page == "Setup",
+        type=_button_type(setup_active),
     ):
-        st.session_state.sidebar_setup_open = not st.session_state.sidebar_setup_open
+        if setup_active:
+            st.session_state.sidebar_setup_open = not st.session_state.sidebar_setup_open
+            st.rerun()
+        else:
+            st.session_state.sidebar_setup_open = True
+            st.session_state.sidebar_companies_open = False
+            _set_active_page("Setup", "Banks")
     if st.session_state.sidebar_setup_open:
         for tab in ["Banks", "Categories"]:
+            tab_active = (
+                st.session_state.active_page == "Setup"
+                and st.session_state.active_subpage == tab
+            )
             if st.button(
                 tab,
                 use_container_width=True,
                 key=f"setup_tab_{tab}",
-                disabled=st.session_state.nav_page == "Setup"
-                and st.session_state.setup_tab == tab,
+                type=_button_type(tab_active),
             ):
-                st.session_state.nav_page = "Setup"
-                st.session_state.setup_tab = tab
                 st.session_state.sidebar_setup_open = True
+                st.session_state.sidebar_companies_open = False
+                _set_active_page("Setup", tab)
 
 
 def _require_active_client() -> int | None:
@@ -457,11 +648,6 @@ def _select_bank(banks_active: list[dict]) -> tuple[int, dict]:
 
 
 def render_home():
-    if logo_path.exists():
-        col_left, col_center, col_right = st.columns([1, 4, 1])
-        with col_center:
-            st.image(str(logo_path), width=520)
-    st.header("Home")
     clients = cached_clients()
     _select_active_client(clients)
     st.markdown("**BankCat Demo**")
@@ -470,12 +656,10 @@ def render_home():
 
 
 def render_dashboard():
-    st.header("Dashboard")
     st.write("Dashboard coming soon.")
 
 
 def render_reports():
-    st.header("Reports")
     client_id = _require_active_client()
     if not client_id:
         return
@@ -753,17 +937,15 @@ def render_companies_add():
 
 
 def render_companies():
-    st.header("Companies")
-    if st.session_state.companies_tab == "List":
+    if st.session_state.active_subpage == "List":
         render_companies_list()
-    elif st.session_state.companies_tab == "Change Company":
+    elif st.session_state.active_subpage == "Change Company":
         render_companies_change()
     else:
         render_companies_add()
 
 
 def render_setup_banks():
-    st.subheader("Banks")
     client_id = _require_active_client()
     if not client_id:
         return
@@ -896,7 +1078,6 @@ def render_setup_banks():
 
 
 def render_setup_categories():
-    st.subheader("Categories")
     client_id = _require_active_client()
     if not client_id:
         return
@@ -912,33 +1093,6 @@ def render_setup_categories():
         st.session_state.setup_categories_mode = "bulk_upload"
         st.session_state.setup_category_edit_id = None
         st.rerun()
-
-    st.subheader("Existing Drafts (this client + bank)")
-    try:
-        summary = crud.drafts_summary(client_id, bank_id)
-        st.dataframe(pd.DataFrame(summary), use_container_width=True, hide_index=True)
-    except Exception as e:
-        st.warning(f"Draft summary unavailable. ({_format_exc(e)})")
-
-    st.subheader("Upload Template (CSV)")
-    stmt_template = pd.DataFrame([
-        {
-            "Date": "2025-10-01",
-            "Description": "POS Purchase Example Vendor",
-            "Dr": 100.00,
-            "Cr": 0.00,
-            "Closing": "",
-        }
-    ])
-    buf2 = io.StringIO()
-    stmt_template.to_csv(buf2, index=False)
-    st.download_button(
-        "Download Statement CSV Template",
-        data=buf2.getvalue(),
-        file_name="statement_template.csv",
-        mime="text/csv",
-    )
-    st.caption("Minimum columns: Date + Description. Dr/Cr recommended. Closing optional (can be blank).")
 
     if st.session_state.setup_categories_mode == "add":
         st.markdown("#### Add Category")
@@ -1074,9 +1228,6 @@ def render_setup_categories():
 
 
 def render_categorisation():
-    st.header(
-        "Categorisation (Upload → Map → Standardize → Save Draft → Suggest → Review → Commit)"
-    )
     client_id = _require_active_client()
     if not client_id:
         return
@@ -1091,60 +1242,131 @@ def render_categorisation():
         st.info("Add at least 1 active bank first.")
         return
 
-    bank_id, bank_obj = _select_bank(banks_active)
+    bank_options = [f"{b['id']} | {b['bank_name']} ({b['account_type']})" for b in banks_active]
+    selected_index = 0
+    if st.session_state.bank_id:
+        for i, opt in enumerate(bank_options):
+            if opt.startswith(f"{st.session_state.bank_id} |"):
+                selected_index = i
+                break
+    bank_pick = st.selectbox("Select Bank", bank_options, index=selected_index, key="cat_bank_select")
+    bank_id = int(bank_pick.split("|")[0].strip())
+    st.session_state.bank_id = bank_id
+    bank_obj = [b for b in banks_active if int(b["id"]) == bank_id][0]
     bank_type = bank_obj.get("account_type", "Current")
 
-    mcol1, mcol2, mcol3 = st.columns(3)
-    with mcol1:
+    month_names = [
+        "Jan",
+        "Feb",
+        "Mar",
+        "Apr",
+        "May",
+        "Jun",
+        "Jul",
+        "Aug",
+        "Sep",
+        "Oct",
+        "Nov",
+        "Dec",
+    ]
+    row2 = st.columns([1, 1, 1, 2])
+    with row2[0]:
         year_range = list(range(2020, 2031))
         year = st.selectbox("Year", year_range, index=year_range.index(st.session_state.year))
         st.session_state.year = year
-    with mcol2:
-        month_names = [
-            "Jan",
-            "Feb",
-            "Mar",
-            "Apr",
-            "May",
-            "Jun",
-            "Jul",
-            "Aug",
-            "Sep",
-            "Oct",
-            "Nov",
-            "Dec",
-        ]
+    with row2[1]:
         month = st.selectbox("Month", month_names, index=month_names.index(st.session_state.month))
         st.session_state.month = month
-    with mcol3:
+    with row2[2]:
         period = f"{year}-{month_names.index(month)+1:02d}"
         st.text_input("Period (auto)", value=period, disabled=True)
     st.session_state.period = period
 
-    st.caption(
-        "Period = statement month label. Even if date range overlaps months, keep period as statement month."
-    )
-
-    st.subheader("Statement Date Range (optional but recommended)")
     month_idx = month_names.index(month) + 1
     last_day = calendar.monthrange(year, month_idx)[1]
     default_range = (
         st.session_state.date_from or dt.date(year, month_idx, 1),
         st.session_state.date_to or dt.date(year, month_idx, last_day),
     )
-    dr = st.date_input("Select From-To", value=default_range)
+    with row2[3]:
+        dr = st.date_input("Statement Date Range", value=default_range, key="cat_date_range")
     date_from, date_to = dr if isinstance(dr, tuple) else (dr, dr)
     st.session_state.date_from = date_from
     st.session_state.date_to = date_to
 
-    st.subheader("Existing Drafts (this client + bank)")
-    try:
-        summary = crud.drafts_summary(client_id, bank_id)
-        st.dataframe(pd.DataFrame(summary), use_container_width=True, hide_index=True)
-    except Exception as e:
-        st.warning(f"Draft summary unavailable. ({_format_exc(e)})")
+    draft_summary = crud.get_draft_summary(client_id, bank_id, period)
+    commit_summary = crud.get_commit_summary(client_id, bank_id, period)
 
-    st.subheader("Upload Template (CSV)")
+    st.markdown("#### Saved Items")
+    item_rows: list[dict] = []
+    if draft_summary:
+        item_rows.append(
+            {
+                "id": "draft_saved",
+                "item_type": "Draft",
+                "status_label": "Draft Saved",
+                "row_count": int(draft_summary.get("row_count") or 0),
+                "min_date": draft_summary.get("min_date"),
+                "max_date": draft_summary.get("max_date"),
+                "last_updated": draft_summary.get("last_saved"),
+            }
+        )
+        if int(draft_summary.get("suggested_count") or 0) > 0:
+            item_rows.append(
+                {
+                    "id": "draft_categorised",
+                    "item_type": "Draft",
+                    "status_label": "Draft Categorised",
+                    "row_count": int(draft_summary.get("row_count") or 0),
+                    "min_date": draft_summary.get("min_date"),
+                    "max_date": draft_summary.get("max_date"),
+                    "last_updated": draft_summary.get("last_saved"),
+                }
+            )
+    if commit_summary:
+        item_rows.append(
+            {
+                "id": f"committed_{commit_summary.get('commit_id')}",
+                "item_type": "Committed",
+                "status_label": "Committed",
+                "row_count": int(commit_summary.get("row_count") or 0),
+                "min_date": commit_summary.get("min_date"),
+                "max_date": commit_summary.get("max_date"),
+                "last_updated": commit_summary.get("committed_at"),
+            }
+        )
+
+    if "categorisation_selected_item" not in st.session_state:
+        st.session_state.categorisation_selected_item = None
+
+    if item_rows:
+        items_df = pd.DataFrame(item_rows).set_index("id")
+        selected_item = st.session_state.categorisation_selected_item
+        if selected_item not in items_df.index:
+            selected_item = items_df.index[0]
+            st.session_state.categorisation_selected_item = selected_item
+        items_df["Select"] = False
+        items_df.loc[selected_item, "Select"] = True
+        display_df = items_df[
+            ["Select", "item_type", "status_label", "row_count", "min_date", "max_date", "last_updated"]
+        ]
+        edited = st.data_editor(
+            display_df,
+            use_container_width=True,
+            hide_index=True,
+            num_rows="fixed",
+            key="saved_items_editor",
+        )
+        selected_ids = items_df.index[edited["Select"]].tolist()
+        if selected_ids:
+            new_selected = selected_ids[0]
+            if new_selected != st.session_state.categorisation_selected_item or len(selected_ids) > 1:
+                st.session_state.categorisation_selected_item = new_selected
+                st.rerun()
+    else:
+        st.info("No saved items yet for this bank + period.")
+
+    st.markdown("#### Downloads & Uploads")
     stmt_template = pd.DataFrame([
         {
             "Date": "2025-10-01",
@@ -1156,127 +1378,219 @@ def render_categorisation():
     ])
     buf2 = io.StringIO()
     stmt_template.to_csv(buf2, index=False)
-    st.download_button(
-        "Download Statement CSV Template",
-        data=buf2.getvalue(),
-        file_name="statement_template.csv",
-        mime="text/csv",
-    )
-    st.caption("Minimum columns: Date + Description. Dr/Cr recommended. Closing optional (can be blank).")
+    dl_col, up_col = st.columns([1, 2])
+    with dl_col:
+        st.download_button(
+            "Download Template (CSV)",
+            data=buf2.getvalue(),
+            file_name="statement_template.csv",
+            mime="text/csv",
+        )
+    with up_col:
+        up_stmt = st.file_uploader("Upload CSV (already converted)", type=["csv"], key="stmt_csv")
 
-    st.subheader("Upload Statement (CSV) — Mode 1 (already converted)")
-    up_stmt = st.file_uploader("Upload CSV File", type=["csv"], key="stmt_csv")
     df_raw = None
     if up_stmt is not None:
-        try:
-            df_raw = pd.read_csv(up_stmt)
-            st.session_state.df_raw = df_raw
-            st.success(f"Loaded ✅ Rows: {len(df_raw)}")
-            st.dataframe(df_raw.head(20), use_container_width=True, hide_index=True)
-        except Exception as e:
-            st.error(f"Upload/Parse failed ❌\n\n{_format_exc(e)}")
+        loader_path = _get_loader_path()
+        with st.spinner("Loading..."):
+            if loader_path:
+                st.image(str(loader_path), width=120)
+            else:
+                st.markdown("😺")
+            try:
+                df_raw = pd.read_csv(up_stmt)
+                st.session_state.df_raw = df_raw
+                st.success(f"Loaded ✅ Rows: {len(df_raw)}")
+            except Exception as e:
+                st.error(f"Upload/Parse failed ❌\n\n{_format_exc(e)}")
     else:
         df_raw = st.session_state.df_raw
 
-    render_mapping_section(client_id, bank_id, period, date_from, date_to, df_raw)
+    standardized_rows = render_mapping_section(client_id, bank_id, period, date_from, date_to, df_raw)
+    st.session_state.standardized_rows = standardized_rows
 
-    st.subheader("Step-6: Suggest Category + Vendor (Draft)")
-    if st.button("Process Suggestions for this bank+period"):
+    st.markdown("#### Main View")
+    selected_item = st.session_state.categorisation_selected_item
+    edited_rows = None
+    if selected_item in {"draft_saved", "draft_categorised"}:
         try:
-            n = crud.process_suggestions(client_id, bank_id, period, bank_account_type=bank_type)
-            st.success(f"Suggestions done ✅ rows={n}")
+            draft_rows = crud.load_draft_rows(client_id, bank_id, period)
         except Exception as e:
-            st.error(f"Suggestion processing failed ❌\n\n{_format_exc(e)}")
+            st.error(f"Unable to load draft rows. {_format_exc(e)}")
+            draft_rows = []
 
-    st.subheader("Review + Finalize (Draft)")
-    try:
-        draft_rows = crud.load_draft(client_id, bank_id, period)
-    except Exception as e:
-        st.error(f"Unable to load draft rows. {_format_exc(e)}")
-        draft_rows = []
-
-    if draft_rows:
-        df_d = pd.DataFrame(draft_rows)
-
-        try:
-            cats_active = crud.list_categories(client_id, include_inactive=False)
-        except Exception as e:
-            st.error(f"Unable to load categories. {_format_exc(e)}")
-            cats_active = []
-        cat_list = [c["category_name"] for c in cats_active]
-
-        view = df_d[
-            [
+        if draft_rows:
+            df_d = pd.DataFrame(draft_rows)
+            base_cols = [
                 "id",
                 "tx_date",
                 "description",
                 "debit",
                 "credit",
                 "balance",
-                "suggested_category",
-                "suggested_vendor",
-                "confidence",
-                "reason",
                 "final_category",
                 "final_vendor",
                 "status",
             ]
-        ].copy()
-
-        st.caption("Edit final_category/final_vendor. This saves INSIDE DRAFT (not committed yet).")
-        edited = st.data_editor(view, use_container_width=True, hide_index=True, num_rows="fixed")
-
-        if st.button("Save Review Changes"):
-            recs = edited.to_dict(orient="records")
-            for rr in recs:
-                fc = (rr.get("final_category") or "").strip()
-                if fc and (fc not in cat_list):
-                    st.error(
-                        f"Final category '{fc}' is not in active Category Master. Add it first."
-                    )
-                    st.stop()
-            try:
-                crud.save_review_changes(recs)
-                st.success("Saved review changes ✅")
-            except Exception as e:
-                st.error(f"Save review changes failed ❌\n\n{_format_exc(e)}")
-
+            if selected_item == "draft_categorised":
+                base_cols.insert(6, "suggested_category")
+                base_cols.insert(7, "suggested_vendor")
+                base_cols.insert(8, "confidence")
+                base_cols.insert(9, "reason")
+            view = df_d[base_cols].copy()
+            editable_cols = {"final_category", "final_vendor"}
+            disabled_cols = [c for c in view.columns if c not in editable_cols]
+            edited = st.data_editor(
+                view,
+                use_container_width=True,
+                hide_index=True,
+                num_rows="fixed",
+                disabled=disabled_cols,
+                key="draft_editor",
+            )
+            edited_rows = edited.to_dict(orient="records")
+        else:
+            st.info("No draft rows found for this bank + period.")
+    elif selected_item and selected_item.startswith("committed"):
+        try:
+            committed_rows = crud.load_committed_rows(client_id, bank_id, period)
+        except Exception as e:
+            st.error(f"Unable to load committed rows. {_format_exc(e)}")
+            committed_rows = []
+        if committed_rows:
+            st.dataframe(pd.DataFrame(committed_rows), use_container_width=True, hide_index=True)
+        else:
+            st.info("No committed rows found for this bank + period.")
+    elif standardized_rows:
+        st.dataframe(pd.DataFrame(standardized_rows), use_container_width=True, hide_index=True)
     else:
-        st.info("No draft yet for this bank+period.")
+        st.info("Select a saved item or upload a statement to view data.")
 
-    st.subheader("Step-7: Commit / Lock / Learn (FINAL)")
-    committed_by = st.text_input("Committed by (optional)", value="")
-    lock_ok = st.checkbox(
-        "I confirm categories/vendors are final and should be locked for reporting (Commit).",
-        value=False,
-    )
+    st.markdown("#### Process Status")
+    status_options = ["Draft", "Draft Saved", "Draft Categorised", "Draft Finalised", "Committed"]
+    current_status = "Draft"
+    draft_row_count = int(draft_summary.get("row_count") or 0) if draft_summary else 0
+    suggested_count = int(draft_summary.get("suggested_count") or 0) if draft_summary else 0
+    final_count = int(draft_summary.get("final_count") or 0) if draft_summary else 0
 
-    if st.button("Commit This Period (Lock & Learn)"):
-        if not lock_ok:
-            st.error("Please tick the confirmation checkbox first.")
+    if commit_summary:
+        current_status = "Committed"
+    elif draft_summary:
+        if final_count >= draft_row_count and suggested_count > 0:
+            current_status = "Draft Finalised"
+        elif suggested_count > 0:
+            current_status = "Draft Categorised"
         else:
-            try:
-                result = crud.commit_period(
-                    client_id, bank_id, period, committed_by=committed_by or None
-                )
-                if result.get("ok"):
-                    st.success(
-                        f"Committed ✅ commit_id={result['commit_id']} rows={result['rows']} accuracy={result['accuracy']}"
-                    )
+            current_status = "Draft Saved"
+    elif standardized_rows:
+        current_status = "Draft"
+
+    status_cols = st.columns([2, 3])
+    with status_cols[0]:
+        st.metric("Current Status", current_status)
+    with status_cols[1]:
+        st.selectbox(
+            "Status",
+            status_options,
+            index=status_options.index(current_status),
+            disabled=True,
+        )
+
+    action_label = None
+    if not commit_summary:
+        if not draft_summary:
+            action_label = "Save Draft"
+        elif suggested_count == 0:
+            action_label = "Suggest Categories"
+        elif final_count < draft_row_count:
+            action_label = "Save Final Draft"
+        else:
+            action_label = "Commit Final"
+
+    committed_by = st.text_input("Committed by (optional)", value="", key="commit_by")
+    confirm_commit = False
+    if action_label == "Commit Final":
+        confirm_commit = st.checkbox(
+            "I confirm categories/vendors are final and should be locked for reporting.",
+            value=False,
+            key="confirm_commit",
+        )
+
+    if action_label:
+        if st.button(action_label, type="primary"):
+            loader_path = _get_loader_path()
+            with st.spinner("Loading..."):
+                if loader_path:
+                    st.image(str(loader_path), width=120)
                 else:
-                    st.error(result.get("msg", "Commit failed."))
-            except Exception as e:
-                st.error(f"Commit failed ❌\n\n{_format_exc(e)}")
-
-    st.subheader("Committed Sample (this bank + period)")
-    try:
-        sample = crud.committed_sample(client_id, bank_id, period, limit=200)
-        if sample:
-            st.dataframe(pd.DataFrame(sample), use_container_width=True, hide_index=True)
-        else:
-            st.info("No committed rows yet for this period.")
-    except Exception as e:
-        st.warning(f"Committed sample not available yet. ({_format_exc(e)})")
+                    st.markdown("😺")
+                if action_label == "Save Draft":
+                    if not standardized_rows:
+                        st.error("Upload and map a statement before saving a draft.")
+                    else:
+                        try:
+                            n = crud.insert_draft_rows(
+                                client_id, bank_id, period, standardized_rows, replace=True
+                            )
+                            st.success(f"Draft saved ✅ rows={n}")
+                            st.session_state.standardized_rows = []
+                            st.session_state.df_raw = None
+                            st.cache_data.clear()
+                            st.rerun()
+                        except Exception as e:
+                            st.error(f"Save draft failed ❌\n\n{_format_exc(e)}")
+                elif action_label == "Suggest Categories":
+                    try:
+                        n = crud.process_suggestions(
+                            client_id, bank_id, period, bank_account_type=bank_type
+                        )
+                        st.success(f"Suggestions done ✅ rows={n}")
+                        st.cache_data.clear()
+                        st.rerun()
+                    except Exception as e:
+                        st.error(f"Suggestion processing failed ❌\n\n{_format_exc(e)}")
+                elif action_label == "Save Final Draft":
+                    if not edited_rows:
+                        st.error("No draft rows available to save.")
+                    else:
+                        try:
+                            cats_active = crud.list_categories(client_id, include_inactive=False)
+                        except Exception as e:
+                            st.error(f"Unable to load categories. {_format_exc(e)}")
+                            cats_active = []
+                        cat_list = [c["category_name"] for c in cats_active]
+                        for rr in edited_rows:
+                            fc = (rr.get("final_category") or "").strip()
+                            if fc and fc not in cat_list:
+                                st.error(
+                                    f"Final category '{fc}' is not in active Category Master. Add it first."
+                                )
+                                st.stop()
+                        try:
+                            crud.save_review_changes(edited_rows)
+                            st.success("Saved final draft ✅")
+                            st.cache_data.clear()
+                            st.rerun()
+                        except Exception as e:
+                            st.error(f"Save final draft failed ❌\n\n{_format_exc(e)}")
+                elif action_label == "Commit Final":
+                    if not confirm_commit:
+                        st.error("Please confirm before committing.")
+                    else:
+                        try:
+                            result = crud.commit_period(
+                                client_id, bank_id, period, committed_by=committed_by or None
+                            )
+                            if result.get("ok"):
+                                st.success(
+                                    f"Committed ✅ commit_id={result['commit_id']} rows={result['rows']} accuracy={result['accuracy']}"
+                                )
+                                st.cache_data.clear()
+                                st.rerun()
+                            else:
+                                st.error(result.get("msg", "Commit failed."))
+                        except Exception as e:
+                            st.error(f"Commit failed ❌\n\n{_format_exc(e)}")
 
 
 def render_mapping_section(
@@ -1287,10 +1601,10 @@ def render_mapping_section(
     date_to: dt.date,
     df_raw: pd.DataFrame | None,
 ):
-    st.subheader("Map Columns → Standard Format")
+    st.markdown("#### Column Mapping")
     if df_raw is None or len(df_raw) == 0:
         st.info("Upload a statement first to map columns.")
-        return
+        return []
 
     cols = ["(blank)"] + list(df_raw.columns)
 
@@ -1357,28 +1671,13 @@ def render_mapping_section(
             }
         )
 
-    st.subheader("Standardize Preview")
     st.caption(
         f"Rows parsed: {len(std_rows)} | Dropped (missing date/desc): {dropped} | Out-of-range (FYI): {out_of_range}"
     )
-    st.dataframe(pd.DataFrame(std_rows[:50]), use_container_width=True, hide_index=True)
-
-    st.subheader("Save Draft")
-    replace = st.checkbox("Replace existing draft for this bank+period", value=True)
-    if st.button("Save Draft Now"):
-        if not std_rows:
-            st.error("No valid rows to save.")
-        else:
-            try:
-                n = crud.insert_draft_rows(client_id, bank_id, period, std_rows, replace=replace)
-                st.success(f"Draft saved ✅ rows={n}")
-                st.cache_data.clear()
-            except Exception as e:
-                st.error(f"Save draft failed ❌\n\n{_format_exc(e)}")
+    return std_rows
 
 
 def render_settings():
-    st.header("Settings")
     st.markdown("### Utilities")
     if st.button("Test DB Connection"):
         try:
@@ -1401,36 +1700,18 @@ def render_settings():
         st.success("Refreshed ✅")
 
     st.markdown("### Verify DB Schema")
+    if "schema_check_result" not in st.session_state:
+        st.session_state.schema_check_result = None
     if st.button("Verify DB Schema"):
-        truth_path = Path("docs/DB_SCHEMA_TRUTH.md")
-        if not truth_path.exists():
-            st.error("docs/DB_SCHEMA_TRUTH.md not found. Please add schema truth file.")
+        st.session_state.schema_check_result = _run_schema_check()
+        st.rerun()
+
+    schema_result = st.session_state.schema_check_result
+    if schema_result:
+        if schema_result.get("error"):
+            st.error(schema_result["error"])
             return
-        truth = _load_schema_truth(truth_path)
-        expected_tables = set(truth.keys())
-        actual_tables = set(crud.list_tables())
-        tables = sorted(expected_tables | actual_tables)
-        results = []
-        for table in tables:
-            expected = truth.get(table, [])
-            actual = crud.list_table_columns(table) if table in actual_tables else []
-            missing = [c for c in expected if c not in actual]
-            extra = [c for c in actual if c not in expected]
-            results.append(
-                {
-                    "table": table,
-                    "table_present": "Yes" if table in actual_tables else "No",
-                    "missing_columns": ", ".join(missing) or "—",
-                    "extra_columns": ", ".join(extra) or "—",
-                }
-            )
-        issues = [
-            r
-            for r in results
-            if r["missing_columns"] != "—"
-            or r["extra_columns"] != "—"
-            or r["table_present"] == "No"
-        ]
+        issues = schema_result.get("issues", [])
         if not issues:
             st.success("✅ DB schema matches docs/DB_SCHEMA_TRUTH.md")
         else:
@@ -1439,15 +1720,14 @@ def render_settings():
 
 
 def render_setup():
-    st.header("Setup")
-    if st.session_state.setup_tab == "Banks":
+    if st.session_state.active_subpage == "Banks":
         render_setup_banks()
     else:
         render_setup_categories()
 
 
 # ---------------- Page Rendering ----------------
-page = st.session_state.nav_page
+page = st.session_state.active_page
 if page == "Home":
     render_home()
 elif page == "Dashboard":
