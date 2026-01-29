@@ -1,4 +1,4 @@
-# app.py - COMPLETE REVISED FILE WITH ALL FIXES
+# app.py - COMPLETE REVISED FILE - ALL FIXES INCLUDED
 import io
 import sys
 import calendar
@@ -201,7 +201,7 @@ def init_session_state():
         "edit_client_mode": st.session_state.get("edit_client_mode", False),
         "standardized_rows": st.session_state.get("standardized_rows", []),
         "categorisation_selected_item": st.session_state.get("categorisation_selected_item"),
-        "sidebar_hidden": st.session_state.get("sidebar_hidden", False),  # NEW: Track sidebar state
+        "sidebar_hidden": st.session_state.get("sidebar_hidden", False),
     }
     
     for key, default_value in defaults.items():
@@ -245,7 +245,14 @@ footer {{
     display: none !important;
 }}
 
-/* When sidebar is hidden by us */
+/* Fix sidebar position - NO GAP */
+[data-testid="stSidebar"] {{
+    top: 0px !important;
+    margin-top: 64px !important;
+    height: calc(100vh - 64px) !important;
+}}
+
+/* When sidebar is hidden */
 .bankcat-sidebar-hidden [data-testid="stSidebar"] {{
     transform: translateX(-100%);
     width: 0 !important;
@@ -253,22 +260,6 @@ footer {{
     margin-left: 0 !important;
     visibility: hidden;
     opacity: 0;
-    transition: transform 0.3s ease, opacity 0.3s ease;
-}}
-
-/* When sidebar is visible */
-[data-testid="stSidebar"] {{
-    width: 240px !important;
-    min-width: 240px !important;
-    top: 64px !important;  /* Header ke neeche start */
-    height: calc(100vh - 64px);
-    background: #ffffff;
-    z-index: 900;
-    transform: translateX(0);
-    visibility: visible;
-    opacity: 1;
-    transition: transform 0.3s ease, opacity 0.3s ease;
-    box-shadow: 2px 0 10px rgba(0,0,0,0.1);
 }}
 
 /* Main content expands when sidebar hidden */
@@ -284,7 +275,6 @@ footer {{
 
 [data-testid="stAppViewContainer"] > .main {{
     padding-top: 5rem;
-    transition: padding-left 0.3s ease, max-width 0.3s ease;
 }}
 
 /* SHOW STREAMLIT DEFAULT HEADER */
@@ -387,11 +377,8 @@ function toggleSidebar() {{
     }} else {{
         document.body.classList.remove('bankcat-sidebar-hidden');
     }}
-    // Update session state via Streamlit
-    window.parent.postMessage({{
-        type: 'streamlit:setComponentValue',
-        value: sidebarHidden
-    }}, '*');
+    // Send message to Streamlit
+    window.parent.postMessage({{type: 'streamlit:setComponentValue', value: {{sidebar_hidden: sidebarHidden}}}}, '*');
 }}
 
 // Fullscreen toggle
@@ -404,23 +391,43 @@ function toggleFullscreen() {{
 }}
 
 // Apply initial state
-if ({'true' if st.session_state.sidebar_hidden else 'false'}) {{
-    document.body.classList.add('bankcat-sidebar-hidden');
-}}
+document.addEventListener('DOMContentLoaded', function() {{
+    if ({'true' if st.session_state.sidebar_hidden else 'false'}) {{
+        document.body.classList.add('bankcat-sidebar-hidden');
+    }}
+}});
 </script>
     """,
     unsafe_allow_html=True,
 )
 
-# Handle sidebar toggle from JavaScript
+# Handle sidebar toggle
 if "sidebar_hidden" not in st.session_state:
     st.session_state.sidebar_hidden = False
 
-# Listen for sidebar toggle
-if st.query_params.get("toggle_sidebar") == "true":
-    st.session_state.sidebar_hidden = not st.session_state.sidebar_hidden
-    st.query_params.clear()
-    st.rerun()
+# JavaScript se message handle karna
+try:
+    import streamlit.components.v1 as components
+    
+    components.html(
+        """
+        <script>
+        // Listen for messages from parent
+        window.addEventListener('message', function(event) {
+            if (event.data.type === 'streamlit:setComponentValue') {
+                // Update Streamlit session state
+                window.parent.postMessage({
+                    type: 'streamlit:setComponentValue',
+                    value: event.data.value
+                }, '*');
+            }
+        });
+        </script>
+        """,
+        height=0,
+    )
+except:
+    pass
 
 with st.sidebar:
     st.markdown("### Navigation")
@@ -449,11 +456,9 @@ with st.sidebar:
             key=f"nav_{page}",
             type=_button_type(is_active),
         ):
-            st.session_state.sidebar_companies_open = False
-            st.session_state.sidebar_setup_open = False
             _set_active_page(page, None)
 
-    # Companies - SIMPLE BUTTON (NOT EXPANDABLE)
+    # Companies - SIMPLE BUTTON
     companies_active = st.session_state.active_page == "Companies"
     if st.button(
         "🏢 Companies",
@@ -461,30 +466,45 @@ with st.sidebar:
         key="nav_companies",
         type=_button_type(companies_active),
     ):
-        st.session_state.sidebar_companies_open = False
-        st.session_state.sidebar_setup_open = False
         _set_active_page("Companies", "List")
 
-# Setup - SIMPLE BUTTON (NOT EXPANDABLE)
-setup_active = st.session_state.active_page == "Setup"
-if st.button(
-    "🛠️ Setup",
-    use_container_width=True,
-    key="nav_setup",
-    type=_button_type(setup_active),
-):
-    st.session_state.sidebar_setup_open = False
-    st.session_state.sidebar_companies_open = False
-    _set_active_page("Setup", "Banks")
+    # Setup - EXPANDABLE (as requested)
+    setup_chevron = "▾" if st.session_state.sidebar_setup_open else "▸"
+    setup_active = st.session_state.active_page == "Setup"
+    if st.button(
+        f"{setup_chevron} 🛠️ Setup",
+        use_container_width=True,
+        key="toggle_setup",
+        type=_button_type(setup_active),
+    ):
+        if setup_active:
+            st.session_state.sidebar_setup_open = not st.session_state.sidebar_setup_open
+            st.rerun()
+        else:
+            st.session_state.sidebar_setup_open = True
+            _set_active_page("Setup", "Banks")
+    
+    if st.session_state.sidebar_setup_open:
+        for tab in ["Banks", "Categories"]:
+            tab_active = (
+                st.session_state.active_page == "Setup"
+                and st.session_state.active_subpage == tab
+            )
+            if st.button(
+                tab,
+                use_container_width=True,
+                key=f"setup_tab_{tab}",
+                type=_button_type(tab_active),
+            ):
+                _set_active_page("Setup", tab)
 
-# Export section added
-st.markdown("---")
-st.markdown("### 📤 Export")
-if st.button("Export Transactions", use_container_width=True):
-    if st.session_state.active_client_id:
-        st.info("Export feature will be implemented here")
-    else:
-        st.warning("Select a company first")
+    st.markdown("---")
+    st.markdown("### 📤 Export")
+    if st.button("Export Transactions", use_container_width=True):
+        if st.session_state.active_client_id:
+            st.info("Export feature will be implemented here")
+        else:
+            st.warning("Select a company first")
 
 
 # ---------------- Helper Functions ----------------
@@ -891,6 +911,7 @@ def render_companies():
 
 
 def render_setup_banks():
+    client_id = _require_active_client()
     if not client_id:
         return
 
@@ -1022,6 +1043,7 @@ def render_setup_banks():
 
 
 def render_setup_categories():
+    client_id = _require_active_client()
     if not client_id:
         return
 
@@ -1185,20 +1207,12 @@ def render_setup_categories():
 
 
 def render_setup():
-    """Setup page with Banks and Categories tabs"""
-    client_id = _require_active_client()
-    if not client_id:
-        st.warning("Select a company first.")
-        return
-    
-    # Create tabs
-    tab1, tab2 = st.tabs(["🏦 Banks", "🏷️ Categories"])
-    
-    with tab1:
+    """Setup page with Banks and Categories based on subpage"""
+    if st.session_state.active_subpage == "Banks":
         render_setup_banks()
-    
-    with tab2:
+    else:
         render_setup_categories()
+
 
 def render_categorisation():
     client_id = _require_active_client()
