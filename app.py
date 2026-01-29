@@ -179,6 +179,28 @@ def _run_schema_check() -> dict[str, object]:
 
 # ---------------- Sidebar Navigation ----------------
 logo_path = ROOT / "assets" / "bankcat-logo.jpeg"
+
+# Sidebar collapse state (toggle via header ☰)
+if "sidebar_collapsed" not in st.session_state:
+    st.session_state.sidebar_collapsed = False
+
+# Query-param toggle: clicking ☰ sets ?bc_toggle_sidebar=1, we flip state and clear the param.
+try:
+    _qp = st.query_params
+    if str(_qp.get("bc_toggle_sidebar", "")).lower() in ("1", "true", "yes", "toggle"):
+        st.session_state.sidebar_collapsed = not st.session_state.sidebar_collapsed
+        try:
+            del _qp["bc_toggle_sidebar"]
+        except Exception:
+            try:
+                _qp.clear()
+            except Exception:
+                pass
+        st.rerun()
+except Exception:
+    pass
+
+
 if "active_page" not in st.session_state:
     st.session_state.active_page = st.session_state.get("nav_page", "Home")
 if "active_subpage" not in st.session_state:
@@ -296,13 +318,18 @@ body.bankcat-sidebar-collapsed [data-testid="stSidebar"] {{
 .bankcat-header__logo {{
     height: 38px;
 }}
-.bankcat-header__btn {{
+.bankcat-header__btn {
     background: transparent;
     border: none;
     color: inherit;
     font-size: 18px;
     cursor: pointer;
 }}
+
+.bankcat-header__link {
+    text-decoration: none;
+    color: inherit;
+}
 .bankcat-header__title {{
     font-size: 20px;
     font-weight: 700;
@@ -316,7 +343,7 @@ body.bankcat-sidebar-collapsed [data-testid="stSidebar"] {{
 </style>
 <div class="bankcat-header">
   <div class="bankcat-header__section bankcat-header__left">
-    <button class="bankcat-header__btn" id="sidebar-toggle" aria-label="Toggle sidebar">☰</button>
+    <a class="bankcat-header__btn bankcat-header__link" href="?bc_toggle_sidebar=1" aria-label="Toggle sidebar">☰</a>
     <img class="bankcat-header__logo" src="{logo_uri}" alt="BankCat logo" />
   </div>
   <div class="bankcat-header__section bankcat-header__middle">
@@ -334,6 +361,13 @@ body.bankcat-sidebar-collapsed [data-testid="stSidebar"] {{
   </div>
 </div>
 <script>
+const SIDEBAR_COLLAPSED = {str(st.session_state.sidebar_collapsed).lower()};
+if (SIDEBAR_COLLAPSED) {
+  document.body.classList.add('bankcat-sidebar-collapsed');
+} else {
+  document.body.classList.remove('bankcat-sidebar-collapsed');
+}
+
 const toggleSidebar = () => {{
   document.body.classList.toggle('bankcat-sidebar-collapsed');
 }};
@@ -344,7 +378,6 @@ const toggleFullscreen = () => {{
     document.exitFullscreen();
   }}
 }};
-document.getElementById('sidebar-toggle')?.addEventListener('click', toggleSidebar);
 document.getElementById('fullscreen-toggle')?.addEventListener('click', toggleFullscreen);
 </script>
     """,
