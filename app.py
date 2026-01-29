@@ -471,7 +471,7 @@ with st.sidebar:
             st.session_state.sidebar_setup_open = False
             _set_active_page("Companies", "List")
         if st.session_state.sidebar_companies_open:
-        for tab in ["List", "Add Company"]:  # "Change Company" removed
+            for tab in ["List", "Add Company"]:  # "Change Company" removed
             tab_active = (
                 st.session_state.active_page == "Companies"
                 and st.session_state.active_subpage == tab
