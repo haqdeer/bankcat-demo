@@ -1,5 +1,64 @@
 ## 2026-01-26
 ### What we built
+- Replaced the header injection with a components-based header, restoring toolbar visibility and reliable sidebar/theme/fullscreen toggles.
+- Added a cat loader spinner for heavy categorisation actions and CSV uploads (emoji fallback if assets/bankcat-loader.gif is not present).
+- Updated DB_SCHEMA_TRUTH.md to match the latest schema columns.
+
+### Why
+- Fix header JS reliability, keep Streamlit controls visible, and keep schema verification accurate.
+
+### Files changed
+- app.py
+- docs/DB_SCHEMA_TRUTH.md
+- docs/BUILD_LOG.md
+
+### Tests done
+- Not run (UI change only).
+
+### Result
+- Pending manual verification.
+
+## 2026-01-26
+### What we built
+- Hid Streamlit default chrome, removed in-page page titles, and aligned sidebar toggling to the custom header only.
+- Redesigned the Categorisation page into the requested single-list + single-table workflow with unified status/actions.
+- Added draft/commit summary helpers for bank+period scoped views.
+
+### Why
+- Match the updated UI requirements and keep categorisation flow consistent and stable for a selected bank/period.
+
+### Files changed
+- app.py
+- src/crud.py
+- docs/BUILD_LOG.md
+
+### Tests done
+- Not run (UI change only).
+
+### Result
+- Pending manual verification.
+
+## 2026-01-26
+### What we built
+- Fixed the persistent header/ sidebar overlap and made the header show the active page title in a full-height green center section.
+- Switched sidebar navigation to immediate, clickable buttons with active styling driven by session state.
+- Made DB schema verification deterministic and stable between clicks, allowing known extras like updated_at.
+
+### Why
+- Ensure the header is always visible, navigation highlights correctly, and schema checks do not fluctuate.
+
+### Files changed
+- app.py
+- docs/BUILD_LOG.md
+
+### Tests done
+- Not run (UI change only).
+
+### Result
+- Pending manual verification.
+
+## 2026-01-26
+### What we built
 - Fixed logo loading to support JPEG assets without UnicodeDecodeError.
 
 ### Why

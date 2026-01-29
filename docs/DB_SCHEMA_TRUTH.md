@@ -5,11 +5,12 @@ This file defines the expected column names per table for schema verification.
 ## clients
 - id
 - name
+- business_description
 - industry
 - country
-- business_description
-- is_active
 - created_at
+- is_active
+- updated_at
 
 ## banks
 - id
@@ -19,8 +20,9 @@ This file defines the expected column names per table for schema verification.
 - account_type
 - currency
 - opening_balance
-- is_active
 - created_at
+- is_active
+- updated_at
 
 ## categories
 - id
@@ -29,11 +31,18 @@ This file defines the expected column names per table for schema verification.
 - category_name
 - type
 - nature
-- is_active
 - created_at
+- is_active
+- updated_at
 
 ## draft_batches
-(Columns not defined in current app schema.)
+- id
+- client_id
+- bank_id
+- period
+- status
+- created_at
+- updated_at
 
 ## transactions_draft
 - id
@@ -45,25 +54,32 @@ This file defines the expected column names per table for schema verification.
 - debit
 - credit
 - balance
-- final_category
-- final_vendor
 - suggested_category
 - suggested_vendor
-- confidence
 - reason
+- confidence
+- final_category
+- final_vendor
 - status
 - created_at
+- updated_at
 
 ## commits
 - id
 - client_id
 - bank_id
 - period
+- from_date
+- to_date
+- row_count
+- accuracy_percent
+- created_at
 - committed_by
+- committed_at
 - rows_committed
 - accuracy
+- notes
 - is_active
-- created_at
 
 ## transactions_committed
 - id
@@ -78,11 +94,11 @@ This file defines the expected column names per table for schema verification.
 - balance
 - category
 - vendor
+- created_at
 - suggested_category
 - suggested_vendor
 - confidence
 - reason
-- created_at
 
 ## vendor_memory
 - id
