@@ -267,7 +267,7 @@ logo_path = ROOT / "assets" / "bankcat-logo.jpeg"
 # فقط ہوم پیج پر لوگو دکھائیں
 if active_page == "Home" and logo_path.exists():
     st.markdown('<div class="home-logo-container">', unsafe_allow_html=True)
-    st.image(str(logo_path), width=250)
+    st.image(str(logo_path), width=500)
     st.markdown('</div>', unsafe_allow_html=True)
     # ہوم پیج پر الگ سے ٹائٹل نہیں دکھائیں گے
 else:
