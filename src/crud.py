@@ -13,13 +13,20 @@ def get_engine():
     return create_engine(db_url, pool_pre_ping=True)
 
 
+# src/crud.py - Line 22 fix
 def _q(sql: str, params: Optional[dict] = None) -> List[dict]:
+    """Execute SELECT query with parameters"""
     engine = get_engine()
-    with engine.begin() as conn:
-        res = conn.execute(text(sql), params or {})
-        rows = res.mappings().all()
-        return [dict(r) for r in rows]
-
+    try:
+        with engine.begin() as conn:
+            # Use text() and params for safety
+            result = conn.execute(text(sql), params or {})
+            rows = result.mappings().all()
+            return [dict(r) for r in rows]
+    except Exception as e:
+        # st.error(f"Database query error: {e}")  # Comment this out if st is not available
+        return []
+        
 
 def _exec(sql: str, params: Optional[dict] = None) -> int:
     engine = get_engine()
