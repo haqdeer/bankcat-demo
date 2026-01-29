@@ -472,20 +472,20 @@ with st.sidebar:
             _set_active_page("Companies", "List")
     
     if st.session_state.sidebar_companies_open:
-        for tab in ["List", "Change Company", "Add Company"]:
-            tab_active = (
-                st.session_state.active_page == "Companies"
-                and st.session_state.active_subpage == tab
-            )
-            if st.button(
-                tab,
-                use_container_width=True,
-                key=f"companies_tab_{tab}",
-                type=_button_type(tab_active),
-            ):
-                st.session_state.sidebar_companies_open = True
-                st.session_state.sidebar_setup_open = False
-                _set_active_page("Companies", tab)
+    for tab in ["List", "Add Company"]:  # "Change Company" removed
+        tab_active = (
+            st.session_state.active_page == "Companies"
+            and st.session_state.active_subpage == tab
+        )
+        if st.button(
+            tab,
+            use_container_width=True,
+            key=f"companies_tab_{tab}",
+            type=_button_type(tab_active),
+        ):
+            st.session_state.sidebar_companies_open = True
+            st.session_state.sidebar_setup_open = False
+            _set_active_page("Companies", tab)
 
     setup_chevron = "▾" if st.session_state.sidebar_setup_open else "▸"
     setup_active = st.session_state.active_page == "Setup"
@@ -622,6 +622,11 @@ def render_dashboard():
             
             # 1. Income vs Expense summary
             st.subheader("💰 Income vs Expense")
+            
+            # Convert to numeric (FIX FOR ERROR)
+            df['debit'] = pd.to_numeric(df['debit'], errors='coerce').fillna(0)
+            df['credit'] = pd.to_numeric(df['credit'], errors='coerce').fillna(0)
+            
             total_income = df['credit'].sum()
             total_expense = df['debit'].sum()
             net = total_income - total_expense
@@ -645,12 +650,35 @@ def render_dashboard():
             else:
                 st.info("No monthly data available")
                 
-            # 3. Top categories
+            # 3. Top categories - FIXED ERROR HERE
             st.subheader("🏷️ Top Expense Categories")
             expenses = df[df['debit'] > 0]
             if not expenses.empty:
-                top_categories = expenses.groupby('category')['debit'].sum().nlargest(10)
-                st.bar_chart(top_categories)
+                # Ensure category column exists and is string
+                if 'category' in expenses.columns:
+                    expenses['category'] = expenses['category'].fillna('Uncategorized')
+                    # Convert debit to numeric if not already
+                    expenses['debit'] = pd.to_numeric(expenses['debit'], errors='coerce').fillna(0)
+                    
+                    top_categories = expenses.groupby('category')['debit'].sum()
+                    
+                    # Check if we have numeric data
+                    if not top_categories.empty:
+                        # Get top 10 categories
+                        top_categories = top_categories.sort_values(ascending=False).head(10)
+                        if not top_categories.empty:
+                            # Create a simple bar chart
+                            chart_data = pd.DataFrame({
+                                'Category': top_categories.index,
+                                'Amount': top_categories.values
+                            })
+                            st.bar_chart(chart_data.set_index('Category'))
+                        else:
+                            st.info("No expense categories to display")
+                    else:
+                        st.info("No expense data available for chart")
+                else:
+                    st.info("Category data not available")
             else:
                 st.info("No expense data available")
                 
@@ -659,7 +687,6 @@ def render_dashboard():
             
     except Exception as e:
         st.error(f"Unable to load dashboard data: {_format_exc(e)}")
-
 
 def render_reports():
     client_id = _require_active_client()
@@ -880,17 +907,15 @@ def render_companies_add():
 
 
 def render_companies():
-    """Main companies page router - NEW ADDED FUNCTION"""
+    """Main companies page router - "Change Company" removed"""
     subpage = st.session_state.active_subpage
     
     if subpage == "List":
         render_companies_list()
-    elif subpage == "Change Company":
-        render_companies_change()
-    elif subpage == "Add Company":
+    elif subpage == "Add Company":  # Only List and Add Company remain
         render_companies_add()
     else:
-        render_companies_list()
+        render_companies_list()  # Default to List
 
 
 def render_setup_banks():
@@ -1130,25 +1155,44 @@ def render_setup_categories():
             st.session_state.setup_category_edit_id = None
             st.rerun()
 
-    if st.session_state.setup_categories_mode == "bulk_upload":
-        st.markdown("#### Bulk Upload Categories (CSV)")
-        cat_file = st.file_uploader("Upload CSV", type=["csv"], key="cat_csv")
-        if cat_file:
-            try:
-                dfu = pd.read_csv(cat_file)
-                st.dataframe(dfu.head(20), use_container_width=True, hide_index=True)
-                rows = dfu.to_dict(orient="records")
-                if st.button("Import Categories Now"):
-                    ok, bad = crud.bulk_add_categories(client_id, rows)
-                    st.success(f"Imported ✅ ok={ok}, skipped={bad}")
-                    cache_data.clear()
-                    st.session_state.setup_categories_mode = "list"
-                    st.rerun()
-            except Exception as e:
-                st.error(f"Category upload parse failed ❌\n\n{_format_exc(e)}")
-        if st.button("Cancel Bulk Upload"):
-            st.session_state.setup_categories_mode = "list"
-            st.rerun()
+if st.session_state.setup_categories_mode == "bulk_upload":
+    st.markdown("#### Bulk Upload Categories (CSV)")
+    
+    # ADD SAMPLE FILE DOWNLOAD
+    sample_data = pd.DataFrame({
+        'category_name': ['Office Supplies', 'Travel Expenses', 'Software Subscriptions'],
+        'type': ['Expense', 'Expense', 'Expense'],
+        'nature': ['Debit', 'Debit', 'Debit']
+    })
+    
+    csv = sample_data.to_csv(index=False)
+    st.download_button(
+        label="📥 Download Sample CSV",
+        data=csv,
+        file_name="categories_sample.csv",
+        mime="text/csv",
+        key="download_sample"
+    )
+    
+    st.caption("Required columns: category_name, type (Income/Expense/Other), nature (Any/Debit/Credit)")
+    
+    cat_file = st.file_uploader("Upload CSV", type=["csv"], key="cat_csv")
+    if cat_file:
+        try:
+            dfu = pd.read_csv(cat_file)
+            st.dataframe(dfu.head(20), use_container_width=True, hide_index=True)
+            rows = dfu.to_dict(orient="records")
+            if st.button("Import Categories Now"):
+                ok, bad = crud.bulk_add_categories(client_id, rows)
+                st.success(f"Imported ✅ ok={ok}, skipped={bad}")
+                cache_data.clear()
+                st.session_state.setup_categories_mode = "list"
+                st.rerun()
+        except Exception as e:
+            st.error(f"Category upload parse failed ❌\n\n{_format_exc(e)}")
+    if st.button("Cancel Bulk Upload"):
+        st.session_state.setup_categories_mode = "list"
+        st.rerun()
 
     if cats:
         st.markdown("#### Category List")
