@@ -1,5 +1,25 @@
 ## 2026-01-26
 ### What we built
+- Replaced the header injection with a components-based header, restoring toolbar visibility and reliable sidebar/theme/fullscreen toggles.
+- Added a cat loader spinner for heavy categorisation actions and CSV uploads (emoji fallback if assets/bankcat-loader.gif is not present).
+- Updated DB_SCHEMA_TRUTH.md to match the latest schema columns.
+
+### Why
+- Fix header JS reliability, keep Streamlit controls visible, and keep schema verification accurate.
+
+### Files changed
+- app.py
+- docs/DB_SCHEMA_TRUTH.md
+- docs/BUILD_LOG.md
+
+### Tests done
+- Not run (UI change only).
+
+### Result
+- Pending manual verification.
+
+## 2026-01-26
+### What we built
 - Hid Streamlit default chrome, removed in-page page titles, and aligned sidebar toggling to the custom header only.
 - Redesigned the Categorisation page into the requested single-list + single-table workflow with unified status/actions.
 - Added draft/commit summary helpers for bank+period scoped views.

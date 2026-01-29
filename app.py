@@ -9,6 +9,7 @@ from pathlib import Path
 
 import pandas as pd
 import streamlit as st
+import streamlit.components.v1 as components
 
 ROOT = Path(__file__).resolve().parent
 if str(ROOT) not in sys.path:
@@ -203,28 +204,29 @@ elif active_page == "Setup" and active_subpage:
 
 logo_uri = _logo_data_uri(logo_path)
 st.markdown(
-    f"""
+    """
 <style>
-[data-testid="stHeader"],
-[data-testid="stToolbar"],
-[data-testid="stDecoration"],
-#MainMenu,
-footer {{
-    display: none;
-}}
 [data-testid="stSidebarCollapseButton"] {{
     display: none;
+}}
+[data-testid="stToolbar"],
+[data-testid="stHeader"] {{
+    z-index: 2000;
 }}
 body.bankcat-sidebar-collapsed [data-testid="stSidebar"] {{
     margin-left: -260px;
     width: 0;
     min-width: 0;
 }}
+body.bankcat-sidebar-collapsed [data-testid="stAppViewContainer"] > .main {{
+    margin-left: 0 !important;
+    padding-left: 1rem;
+}}
 [data-testid="stSidebar"] {{
     width: 240px;
     min-width: 240px;
-    top: 64px;
-    height: calc(100vh - 64px);
+    top: calc(64px + 40px);
+    height: calc(100vh - 64px - 40px);
     background: #ffffff;
     z-index: 900;
     transition: margin-left 0.2s ease, width 0.2s ease;
@@ -234,7 +236,7 @@ body.bankcat-sidebar-collapsed [data-testid="stSidebar"] {{
     padding-bottom: 0.75rem;
 }}
 [data-testid="stAppViewContainer"] > .main {{
-    padding-top: 5rem;
+    padding-top: calc(5rem + 40px);
 }}
 [data-testid="stSidebar"] button[data-testid="baseButton-primary"] {{
     background: #0f9d58;
@@ -262,13 +264,13 @@ body.bankcat-sidebar-collapsed [data-testid="stSidebar"] {{
 }}
 .bankcat-header {{
     position: fixed;
-    top: 0;
+    top: 40px;
     left: 0;
     right: 0;
     height: 64px;
     display: flex;
     align-items: center;
-    z-index: 1000;
+    z-index: 1200;
     box-shadow: 0 2px 6px rgba(0,0,0,0.08);
 }}
 .bankcat-header__section {{
@@ -313,7 +315,49 @@ body.bankcat-sidebar-collapsed [data-testid="stSidebar"] {{
     padding: 6px 10px;
     border: 1px solid #e5e7eb;
 }}
+body.bankcat-dark {{
+    background: #0f172a;
+    color: #e2e8f0;
+}}
+body.bankcat-dark [data-testid="stAppViewContainer"] {{
+    background-color: #0f172a;
+}}
+body.bankcat-dark [data-testid="stSidebar"] {{
+    background: #0b1220;
+}}
+body.bankcat-dark .bankcat-header__left,
+body.bankcat-dark .bankcat-header__right {{
+    background: #0b1220;
+    color: #e2e8f0;
+}}
+body.bankcat-dark .bankcat-header__middle {{
+    background: #16a34a;
+}}
+body.bankcat-dark [data-testid="stSidebar"] button[data-testid="baseButton-primary"] {{
+    background: #16a34a;
+    border-color: #16a34a;
+}}
+body.bankcat-dark [data-testid="stSidebar"] button[data-testid="baseButton-secondary"] {{
+    background: #111827;
+    color: #e2e8f0;
+    border-color: #16a34a;
+}}
+body.bankcat-dark [data-testid="stSidebar"] button[data-testid="baseButton-secondary"]:hover {{
+    background: #111827;
+}}
+body.bankcat-dark input,
+body.bankcat-dark select,
+body.bankcat-dark textarea {{
+    background-color: #0b1220 !important;
+    color: #e2e8f0 !important;
+    border-color: #334155 !important;
+}}
 </style>
+    """,
+    unsafe_allow_html=True,
+)
+
+header_html = f"""
 <div class="bankcat-header">
   <div class="bankcat-header__section bankcat-header__left">
     <button class="bankcat-header__btn" id="sidebar-toggle" aria-label="Toggle sidebar">☰</button>
@@ -323,7 +367,7 @@ body.bankcat-sidebar-collapsed [data-testid="stSidebar"] {{
     <span class="bankcat-header__title">{page_title}</span>
   </div>
   <div class="bankcat-header__section bankcat-header__right">
-    <button class="bankcat-header__btn" aria-label="Theme">🌓</button>
+    <button class="bankcat-header__btn" id="theme-toggle" aria-label="Theme">🌓</button>
     <button class="bankcat-header__btn" id="fullscreen-toggle" aria-label="Fullscreen">⛶</button>
     <button class="bankcat-header__btn" aria-label="Notifications">🔔</button>
     <select aria-label="User menu">
@@ -334,22 +378,84 @@ body.bankcat-sidebar-collapsed [data-testid="stSidebar"] {{
   </div>
 </div>
 <script>
-const toggleSidebar = () => {{
-  document.body.classList.toggle('bankcat-sidebar-collapsed');
-}};
-const toggleFullscreen = () => {{
-  if (!document.fullscreenElement) {{
-    document.documentElement.requestFullscreen();
+  const STORAGE_SIDEBAR_KEY = 'bankcat_sidebar_collapsed';
+  const STORAGE_THEME_KEY = 'bankcat_theme';
+
+  const applyStoredPrefs = () => {{
+    const collapsed = localStorage.getItem(STORAGE_SIDEBAR_KEY) === '1';
+    document.body.classList.toggle('bankcat-sidebar-collapsed', collapsed);
+    const theme = localStorage.getItem(STORAGE_THEME_KEY) || 'light';
+    document.body.classList.toggle('bankcat-dark', theme === 'dark');
+  }};
+
+  const bindHandlers = () => {{
+    const sidebarBtn = document.getElementById('sidebar-toggle');
+    if (sidebarBtn && !sidebarBtn.dataset.bound) {{
+      sidebarBtn.dataset.bound = 'true';
+      sidebarBtn.addEventListener('click', () => {{
+        const next = !(document.body.classList.contains('bankcat-sidebar-collapsed'));
+        document.body.classList.toggle('bankcat-sidebar-collapsed', next);
+        localStorage.setItem(STORAGE_SIDEBAR_KEY, next ? '1' : '0');
+      }});
+    }}
+
+    const themeBtn = document.getElementById('theme-toggle');
+    if (themeBtn && !themeBtn.dataset.bound) {{
+      themeBtn.dataset.bound = 'true';
+      themeBtn.addEventListener('click', () => {{
+        const isDark = document.body.classList.toggle('bankcat-dark');
+        localStorage.setItem(STORAGE_THEME_KEY, isDark ? 'dark' : 'light');
+      }});
+    }}
+
+    const fullscreenBtn = document.getElementById('fullscreen-toggle');
+    if (fullscreenBtn && !fullscreenBtn.dataset.bound) {{
+      fullscreenBtn.dataset.bound = 'true';
+      fullscreenBtn.addEventListener('click', () => {{
+        if (!document.fullscreenElement) {{
+          document.documentElement.requestFullscreen().catch((err) => {{
+            console.warn('Fullscreen request failed', err);
+            alert('Fullscreen not available in this browser.');
+          }});
+        }} else {{
+          document.exitFullscreen().catch((err) => {{
+            console.warn('Exit fullscreen failed', err);
+          }});
+        }}
+      }});
+    }}
+  }};
+
+  const observeDom = () => {{
+    const observer = new MutationObserver(() => {{
+      bindHandlers();
+    }});
+    observer.observe(document.body, {{ childList: true, subtree: true }});
+  }};
+
+  const init = () => {{
+    applyStoredPrefs();
+    bindHandlers();
+    observeDom();
+    let attempts = 0;
+    const retry = setInterval(() => {{
+      bindHandlers();
+      attempts += 1;
+      if (attempts > 10) {{
+        clearInterval(retry);
+      }}
+    }}, 500);
+  }};
+
+  if (document.readyState === 'loading') {{
+    document.addEventListener('DOMContentLoaded', init);
   }} else {{
-    document.exitFullscreen();
+    init();
   }}
-}};
-document.getElementById('sidebar-toggle')?.addEventListener('click', toggleSidebar);
-document.getElementById('fullscreen-toggle')?.addEventListener('click', toggleFullscreen);
 </script>
-    """,
-    unsafe_allow_html=True,
-)
+"""
+
+components.html(header_html, height=110, scrolling=False)
 
 if "active_client_id" not in st.session_state:
     st.session_state.active_client_id = None
@@ -1279,12 +1385,18 @@ def render_categorisation():
 
     df_raw = None
     if up_stmt is not None:
-        try:
-            df_raw = pd.read_csv(up_stmt)
-            st.session_state.df_raw = df_raw
-            st.success(f"Loaded ✅ Rows: {len(df_raw)}")
-        except Exception as e:
-            st.error(f"Upload/Parse failed ❌\n\n{_format_exc(e)}")
+        loader_path = ROOT / "assets" / "bankcat-loader.gif"
+        with st.spinner("Loading..."):
+            if loader_path.exists():
+                st.image(str(loader_path), width=120)
+            else:
+                st.markdown("😺")
+            try:
+                df_raw = pd.read_csv(up_stmt)
+                st.session_state.df_raw = df_raw
+                st.success(f"Loaded ✅ Rows: {len(df_raw)}")
+            except Exception as e:
+                st.error(f"Upload/Parse failed ❌\n\n{_format_exc(e)}")
     else:
         df_raw = st.session_state.df_raw
 
@@ -1400,73 +1512,79 @@ def render_categorisation():
 
     if action_label:
         if st.button(action_label, type="primary"):
-            if action_label == "Save Draft":
-                if not standardized_rows:
-                    st.error("Upload and map a statement before saving a draft.")
+            loader_path = ROOT / "assets" / "bankcat-loader.gif"
+            with st.spinner("Loading..."):
+                if loader_path.exists():
+                    st.image(str(loader_path), width=120)
                 else:
-                    try:
-                        n = crud.insert_draft_rows(
-                            client_id, bank_id, period, standardized_rows, replace=True
-                        )
-                        st.success(f"Draft saved ✅ rows={n}")
-                        st.session_state.standardized_rows = []
-                        st.session_state.df_raw = None
-                        st.cache_data.clear()
-                        st.rerun()
-                    except Exception as e:
-                        st.error(f"Save draft failed ❌\n\n{_format_exc(e)}")
-            elif action_label == "Suggest Categories":
-                try:
-                    n = crud.process_suggestions(
-                        client_id, bank_id, period, bank_account_type=bank_type
-                    )
-                    st.success(f"Suggestions done ✅ rows={n}")
-                    st.cache_data.clear()
-                    st.rerun()
-                except Exception as e:
-                    st.error(f"Suggestion processing failed ❌\n\n{_format_exc(e)}")
-            elif action_label == "Save Final Draft":
-                if not edited_rows:
-                    st.error("No draft rows available to save.")
-                else:
-                    try:
-                        cats_active = crud.list_categories(client_id, include_inactive=False)
-                    except Exception as e:
-                        st.error(f"Unable to load categories. {_format_exc(e)}")
-                        cats_active = []
-                    cat_list = [c["category_name"] for c in cats_active]
-                    for rr in edited_rows:
-                        fc = (rr.get("final_category") or "").strip()
-                        if fc and fc not in cat_list:
-                            st.error(
-                                f"Final category '{fc}' is not in active Category Master. Add it first."
+                    st.markdown("😺")
+                if action_label == "Save Draft":
+                    if not standardized_rows:
+                        st.error("Upload and map a statement before saving a draft.")
+                    else:
+                        try:
+                            n = crud.insert_draft_rows(
+                                client_id, bank_id, period, standardized_rows, replace=True
                             )
-                            st.stop()
-                    try:
-                        crud.save_review_changes(edited_rows)
-                        st.success("Saved final draft ✅")
-                        st.cache_data.clear()
-                        st.rerun()
-                    except Exception as e:
-                        st.error(f"Save final draft failed ❌\n\n{_format_exc(e)}")
-            elif action_label == "Commit Final":
-                if not confirm_commit:
-                    st.error("Please confirm before committing.")
-                else:
-                    try:
-                        result = crud.commit_period(
-                            client_id, bank_id, period, committed_by=committed_by or None
-                        )
-                        if result.get("ok"):
-                            st.success(
-                                f"Committed ✅ commit_id={result['commit_id']} rows={result['rows']} accuracy={result['accuracy']}"
-                            )
+                            st.success(f"Draft saved ✅ rows={n}")
+                            st.session_state.standardized_rows = []
+                            st.session_state.df_raw = None
                             st.cache_data.clear()
                             st.rerun()
-                        else:
-                            st.error(result.get("msg", "Commit failed."))
+                        except Exception as e:
+                            st.error(f"Save draft failed ❌\n\n{_format_exc(e)}")
+                elif action_label == "Suggest Categories":
+                    try:
+                        n = crud.process_suggestions(
+                            client_id, bank_id, period, bank_account_type=bank_type
+                        )
+                        st.success(f"Suggestions done ✅ rows={n}")
+                        st.cache_data.clear()
+                        st.rerun()
                     except Exception as e:
-                        st.error(f"Commit failed ❌\n\n{_format_exc(e)}")
+                        st.error(f"Suggestion processing failed ❌\n\n{_format_exc(e)}")
+                elif action_label == "Save Final Draft":
+                    if not edited_rows:
+                        st.error("No draft rows available to save.")
+                    else:
+                        try:
+                            cats_active = crud.list_categories(client_id, include_inactive=False)
+                        except Exception as e:
+                            st.error(f"Unable to load categories. {_format_exc(e)}")
+                            cats_active = []
+                        cat_list = [c["category_name"] for c in cats_active]
+                        for rr in edited_rows:
+                            fc = (rr.get("final_category") or "").strip()
+                            if fc and fc not in cat_list:
+                                st.error(
+                                    f"Final category '{fc}' is not in active Category Master. Add it first."
+                                )
+                                st.stop()
+                        try:
+                            crud.save_review_changes(edited_rows)
+                            st.success("Saved final draft ✅")
+                            st.cache_data.clear()
+                            st.rerun()
+                        except Exception as e:
+                            st.error(f"Save final draft failed ❌\n\n{_format_exc(e)}")
+                elif action_label == "Commit Final":
+                    if not confirm_commit:
+                        st.error("Please confirm before committing.")
+                    else:
+                        try:
+                            result = crud.commit_period(
+                                client_id, bank_id, period, committed_by=committed_by or None
+                            )
+                            if result.get("ok"):
+                                st.success(
+                                    f"Committed ✅ commit_id={result['commit_id']} rows={result['rows']} accuracy={result['accuracy']}"
+                                )
+                                st.cache_data.clear()
+                                st.rerun()
+                            else:
+                                st.error(result.get("msg", "Commit failed."))
+                        except Exception as e:
+                            st.error(f"Commit failed ❌\n\n{_format_exc(e)}")
 
 
 def render_mapping_section(
