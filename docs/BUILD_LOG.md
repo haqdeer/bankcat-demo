@@ -1,7 +1,7 @@
 ## 2026-01-26
 ### What we built
-- Replaced the header injection with a components-based header, restoring toolbar visibility and reliable sidebar/theme/fullscreen toggles.
-- Added a cat loader spinner for heavy categorisation actions and CSV uploads (emoji fallback if assets/bankcat-loader.gif is not present).
+- Restored the custom header layout while fixing sidebar/theme toggles via session state and a fullscreen overlay button.
+- Added a text-based SVG loader asset and loader helper for heavy actions with emoji fallback when no asset is present.
 - Updated DB_SCHEMA_TRUTH.md to match the latest schema columns.
 
 ### Why
@@ -9,6 +9,7 @@
 
 ### Files changed
 - app.py
+- assets/bankcat-loader.svg
 - docs/DB_SCHEMA_TRUTH.md
 - docs/BUILD_LOG.md
 

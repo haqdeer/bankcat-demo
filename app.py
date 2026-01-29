@@ -178,6 +178,16 @@ def _run_schema_check() -> dict[str, object]:
     return {"issues": issues}
 
 
+def _get_loader_path() -> Path | None:
+    gif_path = ROOT / "assets" / "bankcat-loader.gif"
+    if gif_path.exists():
+        return gif_path
+    svg_path = ROOT / "assets" / "bankcat-loader.svg"
+    if svg_path.exists():
+        return svg_path
+    return None
+
+
 # ---------------- Sidebar Navigation ----------------
 logo_path = ROOT / "assets" / "bankcat-logo.jpeg"
 if "active_page" not in st.session_state:
@@ -202,6 +212,21 @@ if active_page == "Companies" and active_subpage:
 elif active_page == "Setup" and active_subpage:
     page_title = f"Setup > {active_subpage}"
 
+if "sidebar_collapsed" not in st.session_state:
+    st.session_state.sidebar_collapsed = False
+if "theme_mode" not in st.session_state:
+    st.session_state.theme_mode = "light"
+
+if st.button("☰", key="sidebar_toggle", type="secondary"):
+    st.session_state.sidebar_collapsed = not st.session_state.sidebar_collapsed
+    st.rerun()
+
+if st.button("🌓", key="theme_toggle", type="secondary"):
+    st.session_state.theme_mode = (
+        "dark" if st.session_state.theme_mode == "light" else "light"
+    )
+    st.rerun()
+
 logo_uri = _logo_data_uri(logo_path)
 st.markdown(
     """
@@ -211,7 +236,33 @@ st.markdown(
 }}
 [data-testid="stToolbar"],
 [data-testid="stHeader"] {{
-    z-index: 2000;
+    z-index: 5000 !important;
+}}
+div[data-testid="stButton"][data-key="sidebar_toggle"] {{
+    position: fixed;
+    top: 52px;
+    left: 18px;
+    z-index: 3000;
+}}
+div[data-testid="stButton"][data-key="sidebar_toggle"] button {{
+    background: transparent;
+    border: none;
+    box-shadow: none;
+    font-size: 20px;
+    padding: 4px 8px;
+}}
+div[data-testid="stButton"][data-key="theme_toggle"] {{
+    position: fixed;
+    top: 52px;
+    right: 160px;
+    z-index: 3000;
+}}
+div[data-testid="stButton"][data-key="theme_toggle"] button {{
+    background: transparent;
+    border: none;
+    box-shadow: none;
+    font-size: 18px;
+    padding: 4px 8px;
 }}
 body.bankcat-sidebar-collapsed [data-testid="stSidebar"] {{
     margin-left: -260px;
@@ -270,7 +321,7 @@ body.bankcat-sidebar-collapsed [data-testid="stAppViewContainer"] > .main {{
     height: 64px;
     display: flex;
     align-items: center;
-    z-index: 1200;
+    z-index: 2000;
     box-shadow: 0 2px 6px rgba(0,0,0,0.08);
 }}
 .bankcat-header__section {{
@@ -357,19 +408,82 @@ body.bankcat-dark textarea {{
     unsafe_allow_html=True,
 )
 
-header_html = f"""
+if st.session_state.theme_mode == "dark":
+    st.markdown(
+        """
+<style>
+body {
+    background: #0f172a;
+    color: #e2e8f0;
+}
+[data-testid="stAppViewContainer"] {
+    background-color: #0f172a;
+}
+[data-testid="stSidebar"] {
+    background: #0b1220;
+}
+.bankcat-header__left,
+.bankcat-header__right {
+    background: #0b1220;
+    color: #e2e8f0;
+}
+.bankcat-header__middle {
+    background: #16a34a;
+}
+[data-testid="stSidebar"] button[data-testid="baseButton-primary"] {
+    background: #16a34a;
+    border-color: #16a34a;
+}
+[data-testid="stSidebar"] button[data-testid="baseButton-secondary"] {
+    background: #111827;
+    color: #e2e8f0;
+    border-color: #16a34a;
+}
+[data-testid="stSidebar"] button[data-testid="baseButton-secondary"]:hover {
+    background: #111827;
+}
+input,
+select,
+textarea {
+    background-color: #0b1220 !important;
+    color: #e2e8f0 !important;
+    border-color: #334155 !important;
+}
+</style>
+        """,
+        unsafe_allow_html=True,
+    )
+
+if st.session_state.sidebar_collapsed:
+    st.markdown(
+        """
+<style>
+[data-testid="stSidebar"] {
+    display: none;
+}
+[data-testid="stAppViewContainer"] > .main {
+    margin-left: 0 !important;
+    padding-left: 1rem;
+}
+</style>
+        """,
+        unsafe_allow_html=True,
+    )
+
+st.markdown(
+    f"""
 <div class="bankcat-header">
   <div class="bankcat-header__section bankcat-header__left">
-    <button class="bankcat-header__btn" id="sidebar-toggle" aria-label="Toggle sidebar">☰</button>
+    <span class="bankcat-header__btn">☰</span>
     <img class="bankcat-header__logo" src="{logo_uri}" alt="BankCat logo" />
   </div>
   <div class="bankcat-header__section bankcat-header__middle">
     <span class="bankcat-header__title">{page_title}</span>
   </div>
   <div class="bankcat-header__section bankcat-header__right">
-    <button class="bankcat-header__btn" id="theme-toggle" aria-label="Theme">🌓</button>
-    <button class="bankcat-header__btn" id="fullscreen-toggle" aria-label="Fullscreen">⛶</button>
-    <button class="bankcat-header__btn" aria-label="Notifications">🔔</button>
+    <span class="bankcat-header__btn">🌓</span>
+    <span class="bankcat-header__btn">⛶</span>
+    <span class="bankcat-header__btn">🔔</span>
     <select aria-label="User menu">
       <option>Admin</option>
       <option>Profile</option>
@@ -377,85 +491,38 @@ header_html = f"""
     </select>
   </div>
 </div>
+    """,
+    unsafe_allow_html=True,
+)
+
+components.html(
+    """
+<div id="fullscreen-overlay" style="
+  position: fixed;
+  top: 52px;
+  right: 112px;
+  width: 28px;
+  height: 28px;
+  cursor: pointer;
+  z-index: 3001;
+  background: transparent;
+"></div>
 <script>
-  const STORAGE_SIDEBAR_KEY = 'bankcat_sidebar_collapsed';
-  const STORAGE_THEME_KEY = 'bankcat_theme';
-
-  const applyStoredPrefs = () => {{
-    const collapsed = localStorage.getItem(STORAGE_SIDEBAR_KEY) === '1';
-    document.body.classList.toggle('bankcat-sidebar-collapsed', collapsed);
-    const theme = localStorage.getItem(STORAGE_THEME_KEY) || 'light';
-    document.body.classList.toggle('bankcat-dark', theme === 'dark');
-  }};
-
-  const bindHandlers = () => {{
-    const sidebarBtn = document.getElementById('sidebar-toggle');
-    if (sidebarBtn && !sidebarBtn.dataset.bound) {{
-      sidebarBtn.dataset.bound = 'true';
-      sidebarBtn.addEventListener('click', () => {{
-        const next = !(document.body.classList.contains('bankcat-sidebar-collapsed'));
-        document.body.classList.toggle('bankcat-sidebar-collapsed', next);
-        localStorage.setItem(STORAGE_SIDEBAR_KEY, next ? '1' : '0');
-      }});
-    }}
-
-    const themeBtn = document.getElementById('theme-toggle');
-    if (themeBtn && !themeBtn.dataset.bound) {{
-      themeBtn.dataset.bound = 'true';
-      themeBtn.addEventListener('click', () => {{
-        const isDark = document.body.classList.toggle('bankcat-dark');
-        localStorage.setItem(STORAGE_THEME_KEY, isDark ? 'dark' : 'light');
-      }});
-    }}
-
-    const fullscreenBtn = document.getElementById('fullscreen-toggle');
-    if (fullscreenBtn && !fullscreenBtn.dataset.bound) {{
-      fullscreenBtn.dataset.bound = 'true';
-      fullscreenBtn.addEventListener('click', () => {{
-        if (!document.fullscreenElement) {{
-          document.documentElement.requestFullscreen().catch((err) => {{
-            console.warn('Fullscreen request failed', err);
-            alert('Fullscreen not available in this browser.');
-          }});
-        }} else {{
-          document.exitFullscreen().catch((err) => {{
-            console.warn('Exit fullscreen failed', err);
-          }});
-        }}
-      }});
-    }}
-  }};
-
-  const observeDom = () => {{
-    const observer = new MutationObserver(() => {{
-      bindHandlers();
-    }});
-    observer.observe(document.body, {{ childList: true, subtree: true }});
-  }};
-
-  const init = () => {{
-    applyStoredPrefs();
-    bindHandlers();
-    observeDom();
-    let attempts = 0;
-    const retry = setInterval(() => {{
-      bindHandlers();
-      attempts += 1;
-      if (attempts > 10) {{
-        clearInterval(retry);
-      }}
-    }}, 500);
-  }};
-
-  if (document.readyState === 'loading') {{
-    document.addEventListener('DOMContentLoaded', init);
-  }} else {{
-    init();
-  }}
+  const overlay = document.getElementById('fullscreen-overlay');
+  if (overlay) {
+    overlay.addEventListener('click', () => {
+      if (!document.fullscreenElement) {
+        document.documentElement.requestFullscreen();
+      } else {
+        document.exitFullscreen();
+      }
+    });
+  }
 </script>
-"""
-
-components.html(header_html, height=110, scrolling=False)
+    """,
+    height=0,
+    width=0,
+)
 
 if "active_client_id" not in st.session_state:
     st.session_state.active_client_id = None
@@ -1385,9 +1452,9 @@ def render_categorisation():
 
     df_raw = None
     if up_stmt is not None:
-        loader_path = ROOT / "assets" / "bankcat-loader.gif"
+        loader_path = _get_loader_path()
         with st.spinner("Loading..."):
-            if loader_path.exists():
+            if loader_path:
                 st.image(str(loader_path), width=120)
             else:
                 st.markdown("😺")
@@ -1512,9 +1579,9 @@ def render_categorisation():
 
     if action_label:
         if st.button(action_label, type="primary"):
-            loader_path = ROOT / "assets" / "bankcat-loader.gif"
+            loader_path = _get_loader_path()
             with st.spinner("Loading..."):
-                if loader_path.exists():
+                if loader_path:
                     st.image(str(loader_path), width=120)
                 else:
                     st.markdown("😺")
