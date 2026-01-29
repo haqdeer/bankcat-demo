@@ -470,22 +470,21 @@ with st.sidebar:
             st.session_state.sidebar_companies_open = True
             st.session_state.sidebar_setup_open = False
             _set_active_page("Companies", "List")
-    
-    if st.session_state.sidebar_companies_open:
-    for tab in ["List", "Add Company"]:  # "Change Company" removed
-        tab_active = (
-            st.session_state.active_page == "Companies"
-            and st.session_state.active_subpage == tab
-        )
-        if st.button(
-            tab,
-            use_container_width=True,
-            key=f"companies_tab_{tab}",
-            type=_button_type(tab_active),
-        ):
-            st.session_state.sidebar_companies_open = True
-            st.session_state.sidebar_setup_open = False
-            _set_active_page("Companies", tab)
+        if st.session_state.sidebar_companies_open:
+        for tab in ["List", "Add Company"]:  # "Change Company" removed
+            tab_active = (
+                st.session_state.active_page == "Companies"
+                and st.session_state.active_subpage == tab
+            )
+            if st.button(
+                tab,
+                use_container_width=True,
+                key=f"companies_tab_{tab}",
+                type=_button_type(tab_active),
+            ):
+                st.session_state.sidebar_companies_open = True
+                st.session_state.sidebar_setup_open = False
+                _set_active_page("Companies", tab)
 
     setup_chevron = "▾" if st.session_state.sidebar_setup_open else "▸"
     setup_active = st.session_state.active_page == "Setup"
