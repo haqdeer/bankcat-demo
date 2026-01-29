@@ -231,20 +231,36 @@ logo_uri = _logo_data_uri(logo_path)
 st.markdown(
     f"""
 <style>
-[data-testid="stHeader"],
-[data-testid="stToolbar"],
-[data-testid="stDecoration"],
+/* ONLY hide footer aur main menu */
 #MainMenu,
 footer {{
     display: none;
 }}
 
-/* SIDEBAR POSITION FIXED - NO GAP */
+/* STREAMLIT KE DEFAULT BUTTONS SHOW KARO */
+[data-testid="stHeader"] {{
+    display: block !important;
+    background: transparent !important;
+    height: 0 !important;
+    padding: 0 !important;
+}}
+
+[data-testid="stToolbar"] {{
+    display: block !important;
+}}
+
+[data-testid="stDecoration"] {{
+    display: block !important;
+}}
+
+/* SIDEBAR - Header ke neeche position */
 [data-testid="stSidebar"] {{
     top: 64px !important;
     height: calc(100vh - 64px) !important;
+    display: block !important;
+    visibility: visible !important;
+    opacity: 1 !important;
 }}
-
 /* Streamlit ke collapse button ko show karo aur position fix karo */
 [data-testid="stSidebarCollapseButton"] {{
     display: block !important;
