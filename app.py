@@ -324,7 +324,7 @@ body.bankcat-sidebar-collapsed [data-testid="stSidebar"] {{
     color: inherit;
     font-size: 18px;
     cursor: pointer;
-}}
+}}}
 
 .bankcat-header__link {
     text-decoration: none;
