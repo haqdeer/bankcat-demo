@@ -1,4 +1,4 @@
-# app.py - COMPLETE UPDATED FILE
+# app.py - COMPLETE REVISED FILE WITH ALL FIXES
 import io
 import sys
 import calendar
@@ -20,7 +20,7 @@ from src import crud
 
 
 def _logo_data_uri(path: Path) -> str:
-    """Convert image to data URI - FIXED DUPLICATE"""
+    """Convert image to data URI"""
     if not path.exists():
         return ""
     suffix = path.suffix.lower().lstrip(".")
@@ -178,29 +178,30 @@ def _run_schema_check() -> dict[str, object]:
 
 # ---------------- Session State Initialization ----------------
 def init_session_state():
-    """Initialize all session state variables - FIXED MISSING VALUES"""
+    """Initialize all session state variables - IMPROVED STATE MANAGEMENT"""
     defaults = {
         "active_page": st.session_state.get("nav_page", "Home"),
         "active_subpage": None,
-        "active_client_id": None,
-        "active_client_name": None,
-        "bank_id": None,
-        "period": None,
-        "date_from": None,
-        "date_to": None,
-        "df_raw": None,
-        "year": 2025,
-        "month": "Oct",
-        "setup_banks_mode": "list",
-        "setup_bank_edit_id": None,
-        "setup_categories_mode": "list",
-        "setup_category_edit_id": None,
-        "sidebar_companies_open": False,
-        "sidebar_setup_open": False,
-        "edit_client_id": None,
-        "edit_client_mode": False,
-        "standardized_rows": [],
-        "categorisation_selected_item": None,
+        "active_client_id": st.session_state.get("active_client_id"),
+        "active_client_name": st.session_state.get("active_client_name"),
+        "bank_id": st.session_state.get("bank_id"),
+        "period": st.session_state.get("period"),
+        "date_from": st.session_state.get("date_from"),
+        "date_to": st.session_state.get("date_to"),
+        "df_raw": st.session_state.get("df_raw"),
+        "year": st.session_state.get("year", 2025),
+        "month": st.session_state.get("month", "Oct"),
+        "setup_banks_mode": st.session_state.get("setup_banks_mode", "list"),
+        "setup_bank_edit_id": st.session_state.get("setup_bank_edit_id"),
+        "setup_categories_mode": st.session_state.get("setup_categories_mode", "list"),
+        "setup_category_edit_id": st.session_state.get("setup_category_edit_id"),
+        "sidebar_companies_open": st.session_state.get("sidebar_companies_open", False),
+        "sidebar_setup_open": st.session_state.get("sidebar_setup_open", False),
+        "edit_client_id": st.session_state.get("edit_client_id"),
+        "edit_client_mode": st.session_state.get("edit_client_mode", False),
+        "standardized_rows": st.session_state.get("standardized_rows", []),
+        "categorisation_selected_item": st.session_state.get("categorisation_selected_item"),
+        "sidebar_hidden": st.session_state.get("sidebar_hidden", False),  # NEW: Track sidebar state
     }
     
     for key, default_value in defaults.items():
@@ -212,12 +213,6 @@ def init_session_state():
         st.session_state.active_subpage = "List"
     if st.session_state.active_page == "Setup" and not st.session_state.active_subpage:
         st.session_state.active_subpage = "Banks"
-    
-    # Set sidebar open states
-    if st.session_state.active_page == "Companies":
-        st.session_state.sidebar_companies_open = True
-    if st.session_state.active_page == "Setup":
-        st.session_state.sidebar_setup_open = True
 
 
 init_session_state()
@@ -250,8 +245,8 @@ footer {{
     display: none !important;
 }}
 
-/* When sidebar is hidden */
-.bankcat-sidebar-collapsed [data-testid="stSidebar"] {{
+/* When sidebar is hidden by us */
+.bankcat-sidebar-hidden [data-testid="stSidebar"] {{
     transform: translateX(-100%);
     width: 0 !important;
     min-width: 0 !important;
@@ -265,7 +260,7 @@ footer {{
 [data-testid="stSidebar"] {{
     width: 240px !important;
     min-width: 240px !important;
-    top: 64px;
+    top: 64px !important;  /* Header ke neeche start */
     height: calc(100vh - 64px);
     background: #ffffff;
     z-index: 900;
@@ -277,7 +272,7 @@ footer {{
 }}
 
 /* Main content expands when sidebar hidden */
-.bankcat-sidebar-collapsed [data-testid="stAppViewContainer"] > .main {{
+.bankcat-sidebar-hidden [data-testid="stAppViewContainer"] > .main {{
     padding-left: 1rem !important;
     max-width: 100% !important;
 }}
@@ -349,6 +344,7 @@ footer {{
     color: inherit;
     font-size: 18px;
     cursor: pointer;
+    padding: 8px;
 }}
 .bankcat-header__title {{
     font-size: 20px;
@@ -364,7 +360,7 @@ footer {{
 
 <div class="bankcat-header">
   <div class="bankcat-header__section bankcat-header__left">
-    <button class="bankcat-header__btn" id="sidebar-toggle" aria-label="Toggle sidebar">☰</button>
+    <button class="bankcat-header__btn" onclick="toggleSidebar()" aria-label="Toggle sidebar">☰</button>
     <img class="bankcat-header__logo" src="{logo_uri}" alt="BankCat logo" />
   </div>
   <div class="bankcat-header__section bankcat-header__middle">
@@ -372,7 +368,7 @@ footer {{
   </div>
   <div class="bankcat-header__section bankcat-header__right">
     <button class="bankcat-header__btn" aria-label="Theme">🌓</button>
-    <button class="bankcat-header__btn" id="fullscreen-toggle" aria-label="Fullscreen">⛶</button>
+    <button class="bankcat-header__btn" onclick="toggleFullscreen()" aria-label="Fullscreen">⛶</button>
     <button class="bankcat-header__btn" aria-label="Notifications">🔔</button>
     <select aria-label="User menu">
       <option>Admin</option>
@@ -383,46 +379,48 @@ footer {{
 </div>
 
 <script>
-// Store sidebar state
-let sidebarHidden = localStorage.getItem('bankcat-sidebar-hidden') === 'true';
-
-// Function to toggle sidebar
+// Toggle sidebar function
 function toggleSidebar() {{
-    sidebarHidden = !sidebarHidden;
-    localStorage.setItem('bankcat-sidebar-hidden', sidebarHidden);
-    
+    const sidebarHidden = !document.body.classList.contains('bankcat-sidebar-hidden');
     if (sidebarHidden) {{
-        document.body.classList.add('bankcat-sidebar-collapsed');
+        document.body.classList.add('bankcat-sidebar-hidden');
     }} else {{
-        document.body.classList.remove('bankcat-sidebar-collapsed');
+        document.body.classList.remove('bankcat-sidebar-hidden');
     }}
-    
-    // Update button text
-    const btn = document.getElementById('sidebar-toggle');
-    btn.textContent = sidebarHidden ? '☰' : '☰';
+    // Update session state via Streamlit
+    window.parent.postMessage({{
+        type: 'streamlit:setComponentValue',
+        value: sidebarHidden
+    }}, '*');
 }}
 
-// Apply stored state on page load
-document.addEventListener('DOMContentLoaded', function() {{
-    if (sidebarHidden) {{
-        document.body.classList.add('bankcat-sidebar-collapsed');
-    }}
-    document.getElementById('sidebar-toggle').addEventListener('click', toggleSidebar);
-}});
-
 // Fullscreen toggle
-const toggleFullscreen = () => {{
+function toggleFullscreen() {{
   if (!document.fullscreenElement) {{
     document.documentElement.requestFullscreen();
   }} else {{
     document.exitFullscreen();
   }}
-}};
-document.getElementById('fullscreen-toggle')?.addEventListener('click', toggleFullscreen);
+}}
+
+// Apply initial state
+if ({'true' if st.session_state.sidebar_hidden else 'false'}) {{
+    document.body.classList.add('bankcat-sidebar-hidden');
+}}
 </script>
     """,
     unsafe_allow_html=True,
 )
+
+# Handle sidebar toggle from JavaScript
+if "sidebar_hidden" not in st.session_state:
+    st.session_state.sidebar_hidden = False
+
+# Listen for sidebar toggle
+if st.query_params.get("toggle_sidebar") == "true":
+    st.session_state.sidebar_hidden = not st.session_state.sidebar_hidden
+    st.query_params.clear()
+    st.rerun()
 
 with st.sidebar:
     st.markdown("### Navigation")
@@ -455,68 +453,29 @@ with st.sidebar:
             st.session_state.sidebar_setup_open = False
             _set_active_page(page, None)
 
-    companies_chevron = "▾" if st.session_state.sidebar_companies_open else "▸"
+    # Companies - SIMPLE BUTTON (NOT EXPANDABLE)
     companies_active = st.session_state.active_page == "Companies"
     if st.button(
-        f"{companies_chevron} 🏢 Companies",
+        "🏢 Companies",
         use_container_width=True,
-        key="toggle_companies",
+        key="nav_companies",
         type=_button_type(companies_active),
     ):
-        if companies_active:
-            st.session_state.sidebar_companies_open = not st.session_state.sidebar_companies_open
-            st.rerun()
-        else:
-            st.session_state.sidebar_companies_open = True
-            st.session_state.sidebar_setup_open = False
-            _set_active_page("Companies", "List")
-        if st.session_state.sidebar_companies_open:
-            for tab in ["List", "Add Company"]:  # "Change Company" removed
-                tab_active = (
-                st.session_state.active_page == "Companies"
-                and st.session_state.active_subpage == tab
-            )
-            if st.button(
-                tab,
-                use_container_width=True,
-                key=f"companies_tab_{tab}",
-                type=_button_type(tab_active),
-            ):
-                st.session_state.sidebar_companies_open = True
-                st.session_state.sidebar_setup_open = False
-                _set_active_page("Companies", tab)
+        st.session_state.sidebar_companies_open = False
+        st.session_state.sidebar_setup_open = False
+        _set_active_page("Companies", "List")
 
-    setup_chevron = "▾" if st.session_state.sidebar_setup_open else "▸"
+    # Setup - SIMPLE BUTTON (NOT EXPANDABLE)
     setup_active = st.session_state.active_page == "Setup"
     if st.button(
-        f"{setup_chevron} 🛠️ Setup",
+        "🛠️ Setup",
         use_container_width=True,
-        key="toggle_setup",
+        key="nav_setup",
         type=_button_type(setup_active),
     ):
-        if setup_active:
-            st.session_state.sidebar_setup_open = not st.session_state.sidebar_setup_open
-            st.rerun()
-        else:
-            st.session_state.sidebar_setup_open = True
-            st.session_state.sidebar_companies_open = False
-            _set_active_page("Setup", "Banks")
-    
-    if st.session_state.sidebar_setup_open:
-        for tab in ["Banks", "Categories"]:
-            tab_active = (
-                st.session_state.active_page == "Setup"
-                and st.session_state.active_subpage == tab
-            )
-            if st.button(
-                tab,
-                use_container_width=True,
-                key=f"setup_tab_{tab}",
-                type=_button_type(tab_active),
-            ):
-                st.session_state.sidebar_setup_open = True
-                st.session_state.sidebar_companies_open = False
-                _set_active_page("Setup", tab)
+        st.session_state.sidebar_setup_open = False
+        st.session_state.sidebar_companies_open = False
+        _set_active_page("Setup", "Banks")
 
     # Export section added
     st.markdown("---")
@@ -587,8 +546,10 @@ def render_home():
         col_left, col_center, col_right = st.columns([1, 4, 1])
         with col_center:
             st.image(str(logo_path), width=520)
+    
     clients = cached_clients()
     _select_active_client(clients)
+    
     st.markdown("**BankCat Demo**")
     st.write("Welcome to the BankCat demo workspace.")
     st.caption("Shortcuts and quick links will be added later.")
@@ -653,7 +614,7 @@ def render_dashboard():
             st.subheader("🏷️ Top Expense Categories")
             expenses = df[df['debit'] > 0]
             if not expenses.empty:
-                # Ensure category column exists and is string
+                # Check if 'category' column exists before using it
                 if 'category' in expenses.columns:
                     expenses['category'] = expenses['category'].fillna('Uncategorized')
                     # Convert debit to numeric if not already
@@ -677,7 +638,8 @@ def render_dashboard():
                     else:
                         st.info("No expense data available for chart")
                 else:
-                    st.info("Category data not available")
+                    # If category column doesn't exist, show info message
+                    st.info("Category data not available in the selected transactions")
             else:
                 st.info("No expense data available")
                 
@@ -686,6 +648,7 @@ def render_dashboard():
             
     except Exception as e:
         st.error(f"Unable to load dashboard data: {_format_exc(e)}")
+
 
 def render_reports():
     client_id = _require_active_client()
@@ -820,11 +783,20 @@ def render_reports():
 def render_companies_list():
     client_id = st.session_state.active_client_id
     clients = cached_clients()
+    
+    st.subheader("Company List")
+    
+    # Add Company button at top
+    if st.button("➕ Add Company", type="primary"):
+        st.session_state.active_subpage = "Add Company"
+        st.rerun()
+    
+    st.markdown("---")
+    
     if not clients:
-        st.info("No companies yet. Add one below.")
+        st.info("No companies yet. Add one above.")
         return
 
-    st.subheader("Company List")
     header = st.columns([2, 2, 1, 1, 1])
     header[0].markdown("**Name**")
     header[1].markdown("**Industry**")
@@ -841,9 +813,11 @@ def render_companies_list():
             st.session_state.active_client_id = c["id"]
             st.session_state.active_client_name = c["name"]
             st.success(f"Selected client: {c['name']}")
+            st.rerun()
         if row[4].button("✎", key=f"edit_client_{c['id']}"):
             st.session_state.edit_client_id = c["id"]
             st.session_state.edit_client_mode = True
+            st.rerun()
 
     if "edit_client_mode" in st.session_state and st.session_state.edit_client_mode:
         edit = [c for c in clients if c["id"] == st.session_state.edit_client_id][0]
@@ -874,23 +848,16 @@ def render_companies_list():
             st.rerun()
 
 
-def render_companies_change():
-    clients = cached_clients()
-    if not clients:
-        st.info("No companies yet. Add one below.")
-        return
-
-    st.subheader("Change Company")
-    _select_active_client(clients)
-
-
 def render_companies_add():
     st.subheader("Add Company")
+    
     name = st.text_input("Company Name *", key="add_client_name")
     industry = st.text_input("Industry", key="add_client_industry")
     country = st.text_input("Country", key="add_client_country")
     desc = st.text_area("Business Description", key="add_client_desc")
-    if st.button("Save Company"):
+    
+    col1, col2 = st.columns(2)
+    if col1.button("Save Company", type="primary"):
         if not name.strip():
             st.error("Name required.")
         else:
@@ -900,21 +867,27 @@ def render_companies_add():
                 cache_data.clear()
                 st.session_state.active_client_id = cid
                 st.session_state.active_client_name = name
+                st.session_state.active_subpage = "List"  # Go back to list
                 st.rerun()
             except Exception as e:
                 st.error(f"Create client failed ❌\n\n{_format_exc(e)}")
+    
+    if col2.button("Cancel"):
+        st.session_state.active_subpage = "List"
+        st.rerun()
 
 
 def render_companies():
-    """Main companies page router - "Change Company" removed"""
+    """Main companies page router"""
     subpage = st.session_state.active_subpage
     
     if subpage == "List":
         render_companies_list()
-    elif subpage == "Add Company":  # Only List and Add Company remain
+    elif subpage == "Add Company":
         render_companies_add()
     else:
-        render_companies_list()  # Default to List
+        st.session_state.active_subpage = "List"
+        st.rerun()
 
 
 def render_setup_banks():
@@ -1154,44 +1127,44 @@ def render_setup_categories():
             st.session_state.setup_category_edit_id = None
             st.rerun()
 
-if st.session_state.setup_categories_mode == "bulk_upload":
-    st.markdown("#### Bulk Upload Categories (CSV)")
-    
-    # ADD SAMPLE FILE DOWNLOAD
-    sample_data = pd.DataFrame({
-        'category_name': ['Office Supplies', 'Travel Expenses', 'Software Subscriptions'],
-        'type': ['Expense', 'Expense', 'Expense'],
-        'nature': ['Debit', 'Debit', 'Debit']
-    })
-    
-    csv = sample_data.to_csv(index=False)
-    st.download_button(
-        label="📥 Download Sample CSV",
-        data=csv,
-        file_name="categories_sample.csv",
-        mime="text/csv",
-        key="download_sample"
-    )
-    
-    st.caption("Required columns: category_name, type (Income/Expense/Other), nature (Any/Debit/Credit)")
-    
-    cat_file = st.file_uploader("Upload CSV", type=["csv"], key="cat_csv")
-    if cat_file:
-        try:
-            dfu = pd.read_csv(cat_file)
-            st.dataframe(dfu.head(20), use_container_width=True, hide_index=True)
-            rows = dfu.to_dict(orient="records")
-            if st.button("Import Categories Now"):
-                ok, bad = crud.bulk_add_categories(client_id, rows)
-                st.success(f"Imported ✅ ok={ok}, skipped={bad}")
-                cache_data.clear()
-                st.session_state.setup_categories_mode = "list"
-                st.rerun()
-        except Exception as e:
-            st.error(f"Category upload parse failed ❌\n\n{_format_exc(e)}")
-    if st.button("Cancel Bulk Upload"):
-        st.session_state.setup_categories_mode = "list"
-        st.rerun()
+    if st.session_state.setup_categories_mode == "bulk_upload":
+        st.markdown("#### Bulk Upload Categories (CSV)")
+        
+        # ADD SAMPLE FILE DOWNLOAD
+        sample_data = pd.DataFrame({
+            'category_name': ['Office Supplies', 'Travel Expenses', 'Software Subscriptions'],
+            'type': ['Expense', 'Expense', 'Expense'],
+            'nature': ['Debit', 'Debit', 'Debit']
+        })
+        
+        csv = sample_data.to_csv(index=False)
+        st.download_button(
+            label="📥 Download Sample CSV",
+            data=csv,
+            file_name="categories_sample.csv",
+            mime="text/csv",
+            key="download_sample"
+        )
+        
+        st.caption("Required columns: category_name, type (Income/Expense/Other), nature (Any/Debit/Credit)")
+        
+        cat_file = st.file_uploader("Upload CSV", type=["csv"], key="cat_csv")
+        if cat_file:
+            try:
+                dfu = pd.read_csv(cat_file)
+                st.dataframe(dfu.head(20), use_container_width=True, hide_index=True)
+                rows = dfu.to_dict(orient="records")
+                if st.button("Import Categories Now"):
+                    ok, bad = crud.bulk_add_categories(client_id, rows)
+                    st.success(f"Imported ✅ ok={ok}, skipped={bad}")
+                    cache_data.clear()
+                    st.session_state.setup_categories_mode = "list"
+                    st.rerun()
+            except Exception as e:
+                st.error(f"Category upload parse failed ❌\n\n{_format_exc(e)}")
+        if st.button("Cancel Bulk Upload"):
+            st.session_state.setup_categories_mode = "list"
+            st.rerun()
 
     if cats:
         st.markdown("#### Category List")
@@ -1710,7 +1683,7 @@ def main():
     elif page == "Reports":
         render_reports()
     elif page == "Companies":
-        render_companies()  # Fixed: Now calls the router function
+        render_companies()
     elif page == "Setup":
         render_setup()
     elif page == "Categorisation":
@@ -1718,7 +1691,7 @@ def main():
     elif page == "Settings":
         render_settings()
     else:
-        render_home()  # Default fallback
+        render_home()
 
 
 if __name__ == "__main__":
