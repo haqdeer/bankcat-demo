@@ -215,7 +215,45 @@ def init_session_state():
 
 init_session_state()
 
-# ---------------- Page Title & Logo ----------------
+# ---------------- Custom CSS ----------------
+st.markdown(
+    """
+<style>
+/* Sidebar logo styling */
+.sidebar-logo {
+    text-align: center;
+    padding-top: 1rem;
+    padding-bottom: 1rem;
+    margin-bottom: 1rem;
+    border-bottom: 1px solid #e5e7eb;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+}
+
+/* Home page logo styling */
+.home-logo-container {
+    text-align: center;
+    margin: 2rem auto;
+    padding: 2rem 0;
+}
+
+.home-logo-container img {
+    max-width: 250px;
+    height: auto;
+    margin: 0 auto;
+}
+
+/* Page title styling */
+.page-title {
+    margin-top: 1rem;
+}
+</style>
+""",
+    unsafe_allow_html=True,
+)
+
+# ---------------- Page Title ----------------
 active_page = st.session_state.active_page
 active_subpage = st.session_state.active_subpage
 page_title = active_page
@@ -226,40 +264,19 @@ elif active_page == "Setup" and active_subpage:
 
 logo_path = ROOT / "assets" / "bankcat-logo.jpeg"
 
-# Show small logo in main area (top-left)
-if logo_path.exists():
-    col1, col2 = st.columns([1, 10])
-    with col1:
-        st.image(str(logo_path), width=40)
-    with col2:
-        st.title(page_title)
+# فقط ہوم پیج پر لوگو دکھائیں
+if active_page == "Home" and logo_path.exists():
+    st.markdown('<div class="home-logo-container">', unsafe_allow_html=True)
+    st.image(str(logo_path), width=250)
+    st.markdown('</div>', unsafe_allow_html=True)
+    # ہوم پیج پر الگ سے ٹائٹل نہیں دکھائیں گے
 else:
-    st.title(page_title)
-
-# Custom CSS for sidebar logo
-st.markdown(
-    """
-<style>
-/* Sidebar logo styling */
-.sidebar-logo {
-    text-align: center;
-    padding: 1rem 0;
-    margin-bottom: 1rem;
-    border-bottom: 1px solid #e5e7eb;
-}
-
-.sidebar-logo img {
-    max-width: 120px;
-    height: auto;
-}
-</style>
-""",
-    unsafe_allow_html=True,
-)
+    # دیگر صفحات پر صرف ٹائٹل دکھائیں گے
+    st.markdown(f'<h1 class="page-title">{page_title}</h1>', unsafe_allow_html=True)
 
 # ---------------- Sidebar Content ----------------
 with st.sidebar:
-    # Add logo to sidebar top
+    # Add logo to sidebar top (سینٹر میں)
     if logo_path.exists():
         st.markdown('<div class="sidebar-logo">', unsafe_allow_html=True)
         st.image(str(logo_path), width=120)
@@ -400,7 +417,7 @@ def render_home():
     clients = cached_clients()
     _select_active_client(clients)
     
-    st.markdown("**BankCat Demo**")
+    st.markdown("## BankCat Demo")
     st.write("Welcome to the BankCat demo workspace.")
     st.caption("Shortcuts and quick links will be added later.")
 
