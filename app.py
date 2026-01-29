@@ -245,6 +245,10 @@ st.markdown(
     top: 0 !important;
     right: 0 !important;
 }}
+body.bankcat-sidebar-collapsed [data-testid="stAppViewContainer"] > .main {{
+    margin-left: 0 !important;
+    padding-left: 1rem;
+}}
 [data-testid="stSidebar"] {{
     width: 240px;
     min-width: 240px;
@@ -290,7 +294,7 @@ st.markdown(
 }}
 .bankcat-header {{
     position: fixed;
-    top: 0;
+    top: 40px;
     left: 0;
     right: 0;
     height: 64px;
@@ -341,6 +345,43 @@ st.markdown(
     border-radius: 16px;
     padding: 6px 10px;
     border: 1px solid #e5e7eb;
+}}
+body.bankcat-dark {{
+    background: #0f172a;
+    color: #e2e8f0;
+}}
+body.bankcat-dark [data-testid="stAppViewContainer"] {{
+    background-color: #0f172a;
+}}
+body.bankcat-dark [data-testid="stSidebar"] {{
+    background: #0b1220;
+}}
+body.bankcat-dark .bankcat-header__left,
+body.bankcat-dark .bankcat-header__right {{
+    background: #0b1220;
+    color: #e2e8f0;
+}}
+body.bankcat-dark .bankcat-header__middle {{
+    background: #16a34a;
+}}
+body.bankcat-dark [data-testid="stSidebar"] button[data-testid="baseButton-primary"] {{
+    background: #16a34a;
+    border-color: #16a34a;
+}}
+body.bankcat-dark [data-testid="stSidebar"] button[data-testid="baseButton-secondary"] {{
+    background: #111827;
+    color: #e2e8f0;
+    border-color: #16a34a;
+}}
+body.bankcat-dark [data-testid="stSidebar"] button[data-testid="baseButton-secondary"]:hover {{
+    background: #111827;
+}}
+body.bankcat-dark input,
+body.bankcat-dark select,
+body.bankcat-dark textarea {{
+    background-color: #0b1220 !important;
+    color: #e2e8f0 !important;
+    border-color: #334155 !important;
 }}
 </style>
     """,
