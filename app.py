@@ -1,4 +1,4 @@
-# app.py - COMPLETE REVISED FILE - ALL FIXES INCLUDED
+# app.py - COMPLETE FIXED VERSION
 import io
 import sys
 import calendar
@@ -201,7 +201,6 @@ def init_session_state():
         "edit_client_mode": st.session_state.get("edit_client_mode", False),
         "standardized_rows": st.session_state.get("standardized_rows", []),
         "categorisation_selected_item": st.session_state.get("categorisation_selected_item"),
-        "sidebar_hidden": st.session_state.get("sidebar_hidden", False),
     }
     
     for key, default_value in defaults.items():
@@ -240,32 +239,23 @@ footer {{
     display: none;
 }}
 
-/* SIDEBAR FIXED - Hide collapse button */
-[data-testid="stSidebarCollapseButton"] {{
-    display: none !important;
-}}
-
-/* Fix sidebar position - NO GAP */
+/* SIDEBAR POSITION FIXED - NO GAP */
 [data-testid="stSidebar"] {{
-    top: 0px !important;
-    margin-top: 64px !important;
+    top: 64px !important;
     height: calc(100vh - 64px) !important;
 }}
 
-/* When sidebar is hidden */
-.bankcat-sidebar-hidden [data-testid="stSidebar"] {{
-    transform: translateX(-100%);
-    width: 0 !important;
-    min-width: 0 !important;
-    margin-left: 0 !important;
-    visibility: hidden;
-    opacity: 0;
+/* Streamlit ke collapse button ko show karo aur position fix karo */
+[data-testid="stSidebarCollapseButton"] {{
+    display: block !important;
+    top: 20px !important;
+    left: 20px !important;
+    z-index: 1002;
 }}
 
-/* Main content expands when sidebar hidden */
-.bankcat-sidebar-hidden [data-testid="stAppViewContainer"] > .main {{
-    padding-left: 1rem !important;
-    max-width: 100% !important;
+/* Header ke andar se ☰ button hide karo */
+.bankcat-header__left button.bankcat-header__btn {{
+    display: none !important;
 }}
 
 [data-testid="stSidebar"] .block-container {{
@@ -350,7 +340,7 @@ footer {{
 
 <div class="bankcat-header">
   <div class="bankcat-header__section bankcat-header__left">
-    <button class="bankcat-header__btn" onclick="toggleSidebar()" aria-label="Toggle sidebar">☰</button>
+    <!-- ☰ button REMOVED - Streamlit ka native collapse button use hoga -->
     <img class="bankcat-header__logo" src="{logo_uri}" alt="BankCat logo" />
   </div>
   <div class="bankcat-header__section bankcat-header__middle">
@@ -369,19 +359,7 @@ footer {{
 </div>
 
 <script>
-// Toggle sidebar function
-function toggleSidebar() {{
-    const sidebarHidden = !document.body.classList.contains('bankcat-sidebar-hidden');
-    if (sidebarHidden) {{
-        document.body.classList.add('bankcat-sidebar-hidden');
-    }} else {{
-        document.body.classList.remove('bankcat-sidebar-hidden');
-    }}
-    // Send message to Streamlit
-    window.parent.postMessage({{type: 'streamlit:setComponentValue', value: {{sidebar_hidden: sidebarHidden}}}}, '*');
-}}
-
-// Fullscreen toggle
+// Fullscreen toggle only
 function toggleFullscreen() {{
   if (!document.fullscreenElement) {{
     document.documentElement.requestFullscreen();
@@ -389,45 +367,10 @@ function toggleFullscreen() {{
     document.exitFullscreen();
   }}
 }}
-
-// Apply initial state
-document.addEventListener('DOMContentLoaded', function() {{
-    if ({'true' if st.session_state.sidebar_hidden else 'false'}) {{
-        document.body.classList.add('bankcat-sidebar-hidden');
-    }}
-}});
 </script>
     """,
     unsafe_allow_html=True,
 )
-
-# Handle sidebar toggle
-if "sidebar_hidden" not in st.session_state:
-    st.session_state.sidebar_hidden = False
-
-# JavaScript se message handle karna
-try:
-    import streamlit.components.v1 as components
-    
-    components.html(
-        """
-        <script>
-        // Listen for messages from parent
-        window.addEventListener('message', function(event) {
-            if (event.data.type === 'streamlit:setComponentValue') {
-                // Update Streamlit session state
-                window.parent.postMessage({
-                    type: 'streamlit:setComponentValue',
-                    value: event.data.value
-                }, '*');
-            }
-        });
-        </script>
-        """,
-        height=0,
-    )
-except:
-    pass
 
 with st.sidebar:
     st.markdown("### Navigation")
