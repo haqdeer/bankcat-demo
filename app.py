@@ -244,54 +244,67 @@ st.markdown(
 footer {{
     display: none;
 }}
+
+/* SIDEBAR FIXED - Hide collapse button */
 [data-testid="stSidebarCollapseButton"] {{
-    display: none;
+    display: none !important;
 }}
-body.bankcat-sidebar-collapsed [data-testid="stSidebar"] {{
-    margin-left: -260px;
-    width: 0;
-    min-width: 0;
+
+/* When sidebar is hidden */
+.bankcat-sidebar-collapsed [data-testid="stSidebar"] {{
+    transform: translateX(-100%);
+    width: 0 !important;
+    min-width: 0 !important;
+    margin-left: 0 !important;
+    visibility: hidden;
+    opacity: 0;
+    transition: transform 0.3s ease, opacity 0.3s ease;
 }}
+
+/* When sidebar is visible */
 [data-testid="stSidebar"] {{
-    width: 240px;
-    min-width: 240px;
+    width: 240px !important;
+    min-width: 240px !important;
     top: 64px;
     height: calc(100vh - 64px);
     background: #ffffff;
     z-index: 900;
-    transition: margin-left 0.2s ease, width 0.2s ease;
+    transform: translateX(0);
+    visibility: visible;
+    opacity: 1;
+    transition: transform 0.3s ease, opacity 0.3s ease;
+    box-shadow: 2px 0 10px rgba(0,0,0,0.1);
 }}
+
+/* Main content expands when sidebar hidden */
+.bankcat-sidebar-collapsed [data-testid="stAppViewContainer"] > .main {{
+    padding-left: 1rem !important;
+    max-width: 100% !important;
+}}
+
 [data-testid="stSidebar"] .block-container {{
     padding-top: 1rem;
     padding-bottom: 0.75rem;
 }}
+
 [data-testid="stAppViewContainer"] > .main {{
     padding-top: 5rem;
+    transition: padding-left 0.3s ease, max-width 0.3s ease;
 }}
-[data-testid="stSidebar"] button[data-testid="baseButton-primary"] {{
-    background: #0f9d58;
-    color: #ffffff;
-    border-radius: 10px;
-    border: 1px solid #0f9d58;
-    font-weight: 600;
+
+/* SHOW STREAMLIT DEFAULT HEADER */
+[data-testid="stHeader"] {{
+    display: block !important;
+    background: transparent !important;
+    height: 0 !important;
+    padding: 0 !important;
 }}
-[data-testid="stSidebar"] button[data-testid="baseButton-primary"]:hover {{
-    background: #0c8048;
-    border-color: #0c8048;
-    color: #ffffff;
+
+/* Fix main content position */
+[data-testid="stAppViewContainer"] {{
+    padding-top: 64px !important;
 }}
-[data-testid="stSidebar"] button[data-testid="baseButton-secondary"] {{
-    background: #ffffff;
-    color: #0f9d58;
-    border: 1px solid #0f9d58;
-    border-radius: 10px;
-    font-weight: 600;
-}}
-[data-testid="stSidebar"] button[data-testid="baseButton-secondary"]:hover {{
-    background: #f3f4f6;
-    color: #0f9d58;
-    border: 1px solid #0f9d58;
-}}
+
 .bankcat-header {{
     position: fixed;
     top: 0;
@@ -300,9 +313,11 @@ body.bankcat-sidebar-collapsed [data-testid="stSidebar"] {{
     height: 64px;
     display: flex;
     align-items: center;
-    z-index: 1000;
+    z-index: 1001;
     box-shadow: 0 2px 6px rgba(0,0,0,0.08);
+    background: white;
 }}
+
 .bankcat-header__section {{
     height: 100%;
     display: flex;
@@ -346,6 +361,7 @@ body.bankcat-sidebar-collapsed [data-testid="stSidebar"] {{
     border: 1px solid #e5e7eb;
 }}
 </style>
+
 <div class="bankcat-header">
   <div class="bankcat-header__section bankcat-header__left">
     <button class="bankcat-header__btn" id="sidebar-toggle" aria-label="Toggle sidebar">☰</button>
@@ -365,10 +381,36 @@ body.bankcat-sidebar-collapsed [data-testid="stSidebar"] {{
     </select>
   </div>
 </div>
+
 <script>
-const toggleSidebar = () => {{
-  document.body.classList.toggle('bankcat-sidebar-collapsed');
-}};
+// Store sidebar state
+let sidebarHidden = localStorage.getItem('bankcat-sidebar-hidden') === 'true';
+
+// Function to toggle sidebar
+function toggleSidebar() {{
+    sidebarHidden = !sidebarHidden;
+    localStorage.setItem('bankcat-sidebar-hidden', sidebarHidden);
+    
+    if (sidebarHidden) {{
+        document.body.classList.add('bankcat-sidebar-collapsed');
+    }} else {{
+        document.body.classList.remove('bankcat-sidebar-collapsed');
+    }}
+    
+    // Update button text
+    const btn = document.getElementById('sidebar-toggle');
+    btn.textContent = sidebarHidden ? '☰' : '☰';
+}}
+
+// Apply stored state on page load
+document.addEventListener('DOMContentLoaded', function() {{
+    if (sidebarHidden) {{
+        document.body.classList.add('bankcat-sidebar-collapsed');
+    }}
+    document.getElementById('sidebar-toggle').addEventListener('click', toggleSidebar);
+}});
+
+// Fullscreen toggle
 const toggleFullscreen = () => {{
   if (!document.fullscreenElement) {{
     document.documentElement.requestFullscreen();
@@ -376,7 +418,6 @@ const toggleFullscreen = () => {{
     document.exitFullscreen();
   }}
 }};
-document.getElementById('sidebar-toggle')?.addEventListener('click', toggleSidebar);
 document.getElementById('fullscreen-toggle')?.addEventListener('click', toggleFullscreen);
 </script>
     """,
