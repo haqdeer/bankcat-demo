@@ -1,4 +1,4 @@
-# app.py - WITH LOADER FUNCTIONALITY
+# app.py - WITH LOADER FUNCTIONALITY (FIXED)
 import io
 import sys
 import calendar
@@ -18,7 +18,8 @@ if str(ROOT) not in sys.path:
 
 from src.schema import init_db
 from src import crud
-from src.loader import show_loader, show_simple_loader  # Added loader import
+# Note: Changed import to match new loader.py functions
+from src.loader import show_full_page_loader, show_page_transition_loader, simulate_data_loading
 
 
 def _logo_data_uri(path: Path) -> str:
@@ -207,6 +208,7 @@ def init_session_state():
         "app_initialized": st.session_state.get("app_initialized", False),
         "show_page_loader": st.session_state.get("show_page_loader", False),
         "previous_page": st.session_state.get("previous_page", None),
+        "page_loader_start_time": st.session_state.get("page_loader_start_time", 0),
     }
     
     for key, default_value in defaults.items():
@@ -245,7 +247,7 @@ st.markdown(
 }
 
 .home-logo-container img {
-    max-width: 520px;
+    max-width: 520px;  /* Changed from 220px to 520px */
     height: auto;
     margin: 0 auto;
 }
@@ -276,14 +278,85 @@ st.markdown(
     padding-top: 1rem !important;
 }
 
-/* Loader animation styles */
-@keyframes fadeIn {
-    from { opacity: 0; }
-    to { opacity: 1; }
+/* SVG Loader Animation - CRITICAL FIX */
+@keyframes spin {
+    0% { transform: rotate(0deg); }
+    100% { transform: rotate(360deg); }
 }
 
-.loader-fade-in {
-    animation: fadeIn 0.5s ease-in;
+@keyframes eyeGlow {
+    0%, 100% { 
+        opacity: 0.3;
+        filter: drop-shadow(0 0 5px rgba(124, 255, 178, 0.3));
+    }
+    50% { 
+        opacity: 1;
+        filter: drop-shadow(0 0 20px rgba(124, 255, 178, 0.9));
+    }
+}
+
+@keyframes fadeOut {
+    from { opacity: 1; }
+    to { opacity: 0; visibility: hidden; }
+}
+
+.svg-loader {
+    animation: spin 1.8s linear infinite;
+    width: 200px;
+    height: 200px;
+    margin: 0 auto;
+    display: block;
+    filter: drop-shadow(0 0 10px rgba(124, 255, 178, 0.5));
+}
+
+.eye-animation {
+    animation: eyeGlow 1.2s ease-in-out infinite;
+}
+
+.full-page-loader {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100vh;
+    background: white;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+    z-index: 9999;
+}
+
+.page-loader {
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+    height: 70vh;
+    width: 100%;
+    background: white;
+    position: absolute;
+    top: 0;
+    left: 0;
+    z-index: 1000;
+}
+
+.loader-hidden {
+    animation: fadeOut 0.5s forwards;
+}
+
+.loading-text {
+    margin-top: 25px;
+    color: #4a5568;
+    font-size: 16px;
+    font-weight: 500;
+    letter-spacing: 3px;
+    animation: eyeGlow 2s ease-in-out infinite;
+}
+
+/* Fix for Streamlit UI */
+.stApp > header:first-child {
+    z-index: 10000;
 }
 </style>
 """,
@@ -300,11 +373,12 @@ elif active_page == "Setup" and active_subpage:
     page_title = f"Setup > {active_subpage}"
 
 logo_path = ROOT / "assets" / "bankcat-logo.jpeg"
+loader_svg_path = ROOT / "assets" / "bankcat-loader.gif.svg"
 
 # فقط ہوم پیج پر لوگو دکھائیں
 if active_page == "Home" and logo_path.exists():
     st.markdown('<div class="home-logo-container">', unsafe_allow_html=True)
-    st.image(str(logo_path), width=520)
+    st.image(str(logo_path), width=520)  # Changed from 220 to 520
     st.markdown('</div>', unsafe_allow_html=True)
     # ہوم پیج پر الگ سے ٹائٹل نہیں دکھائیں گے
 else:
@@ -314,108 +388,159 @@ else:
 # ---------------- App Initialization Loader ----------------
 if not st.session_state.app_initialized:
     # Show full page loader on app startup
-    with st.container():
-        st.markdown(
-            """
-            <style>
-            .full-loader {
-                display: flex;
-                justify-content: center;
-                align-items: center;
-                height: 100vh;
-                width: 100%;
-            }
-            </style>
-            """,
-            unsafe_allow_html=True
-        )
-        
-        # Simple centered loader for startup
-        col1, col2, col3 = st.columns([1, 2, 1])
-        with col2:
-            st.markdown('<div class="loader-fade-in">', unsafe_allow_html=True)
-            loader_path = ROOT / "assets" / "bankcat-loader.gif.svg"
-            if loader_path.exists():
-                st.image(str(loader_path), width=180)
-            else:
-                st.markdown("""
-                <div style="text-align: center; padding: 50px;">
-                    <div style="width: 80px; height: 80px; margin: 0 auto 20px; 
-                        border: 6px solid #f3f3f3; border-top: 6px solid #7CFFB2; 
-                        border-radius: 50%; animation: spin 1.5s linear infinite;">
-                    </div>
-                    <h3 style="color: #4a5568;">Loading BankCat...</h3>
-                </div>
-                <style>
-                @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
-                </style>
-                """, unsafe_allow_html=True)
-            st.markdown('</div>', unsafe_allow_html=True)
+    loader_container = st.empty()
     
-    # Simulate initialization
-    time.sleep(1.5)
+    with loader_container.container():
+        # Hide Streamlit's default UI temporarily
+        st.markdown("""
+        <style>
+        #MainMenu { visibility: hidden; }
+        footer { visibility: hidden; }
+        header { visibility: hidden; }
+        </style>
+        """, unsafe_allow_html=True)
+        
+        # Show animated loader
+        st.markdown("""
+        <div class="full-page-loader">
+            <div style="text-align: center; padding: 20px;">
+        """, unsafe_allow_html=True)
+        
+        if loader_svg_path.exists():
+            # Display SVG with animation
+            st.markdown(f"""
+            <img src="data:image/svg+xml;base64,{base64.b64encode(loader_svg_path.read_bytes()).decode('utf-8')}" 
+                 class="svg-loader" 
+                 alt="Loading BankCat"/>
+            """, unsafe_allow_html=True)
+        else:
+            # Fallback loader
+            st.markdown("""
+            <div style="width: 100px; height: 100px; margin: 0 auto; 
+                border: 8px solid #f3f3f3; border-top: 8px solid #7CFFB2; 
+                border-radius: 50%; animation: spin 1.5s linear infinite;">
+            </div>
+            """, unsafe_allow_html=True)
+        
+        st.markdown("""
+                <div class="loading-text">INITIALIZING BANKCAT</div>
+            </div>
+        </div>
+        """, unsafe_allow_html=True)
+    
+    # Simulate app initialization (2-3 seconds)
+    time.sleep(2.5)
     
     # Mark app as initialized
     st.session_state.app_initialized = True
+    
+    # Add fade-out animation
+    st.markdown("""
+    <script>
+    setTimeout(function() {
+        var loader = document.querySelector('.full-page-loader');
+        if (loader) {
+            loader.classList.add('loader-hidden');
+        }
+    }, 300);
+    
+    setTimeout(function() {
+        var loader = document.querySelector('.full-page-loader');
+        if (loader && loader.parentNode) {
+            loader.parentNode.removeChild(loader);
+        }
+    }, 800);
+    </script>
+    """, unsafe_allow_html=True)
+    
+    # Clear loader and rerun
+    time.sleep(0.8)
+    loader_container.empty()
     st.rerun()
 
 # ---------------- Page Transition Handler ----------------
 def handle_page_transition(new_page: str, subpage: str | None = None):
-    """Handle page transitions with loader"""
+    """Handle page transitions with proper loader"""
     if st.session_state.active_page != new_page:
+        # Store previous page
         st.session_state.previous_page = st.session_state.active_page
+        
+        # Set new page
         st.session_state.active_page = new_page
         if subpage:
             st.session_state.active_subpage = subpage
+        
+        # Show page transition loader
         st.session_state.show_page_loader = True
+        st.session_state.page_loader_start_time = time.time()
         st.rerun()
 
 # Show page transition loader if needed
-if st.session_state.show_page_loader:
+if st.session_state.get('show_page_loader', False):
+    # Create loader placeholder
     loader_placeholder = st.empty()
-    with loader_placeholder.container():
-        st.markdown(
-            """
-            <style>
-            .page-loader {
-                display: flex;
-                justify-content: center;
-                align-items: center;
-                height: 60vh;
-                width: 100%;
-            }
-            </style>
-            """,
-            unsafe_allow_html=True
-        )
-        
-        col1, col2, col3 = st.columns([1, 2, 1])
-        with col2:
-            # Simple spinner animation
-            st.markdown("""
-            <div style="text-align: center;">
-                <div style="width: 60px; height: 60px; margin: 0 auto 20px; 
-                    border: 5px solid #f3f3f3; border-top: 5px solid #7CFFB2; 
-                    border-radius: 50%; animation: spin 1s linear infinite;">
-                </div>
-                <p style="color: #4a5568; font-size: 14px;">Loading page...</p>
-            </div>
-            <style>
-            @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
-            </style>
-            """, unsafe_allow_html=True)
     
-    # Short delay to show loader
+    with loader_placeholder.container():
+        # Clear main area and show loader
+        st.markdown("""
+        <div class="page-loader">
+            <div style="text-align: center; padding: 40px;">
+        """, unsafe_allow_html=True)
+        
+        if loader_svg_path.exists():
+            # Display animated SVG
+            st.markdown(f"""
+            <img src="data:image/svg+xml;base64,{base64.b64encode(loader_svg_path.read_bytes()).decode('utf-8')}" 
+                 class="svg-loader" 
+                 alt="Loading..."/>
+            """, unsafe_allow_html=True)
+        else:
+            # Fallback spinner
+            st.markdown("""
+            <div style="width: 80px; height: 80px; margin: 0 auto; 
+                border: 6px solid #f3f3f3; border-top: 6px solid #7CFFB2; 
+                border-radius: 50%; animation: spin 1.5s linear infinite;">
+            </div>
+            """, unsafe_allow_html=True)
+        
+        st.markdown("""
+                <div class="loading-text">LOADING PAGE</div>
+            </div>
+        </div>
+        """, unsafe_allow_html=True)
+    
+    # Simulate minimum loading time (1.5-2 seconds)
+    min_loading_time = 1.8  # Minimum 1.8 seconds
+    elapsed_time = time.time() - st.session_state.get('page_loader_start_time', time.time())
+    
+    if elapsed_time < min_loading_time:
+        time.sleep(min_loading_time - elapsed_time)
+    
+    # Add fade-out effect
+    st.markdown("""
+    <script>
+    setTimeout(function() {
+        var loader = document.querySelector('.page-loader');
+        if (loader) {
+            loader.classList.add('loader-hidden');
+        }
+    }, 300);
+    </script>
+    """, unsafe_allow_html=True)
+    
     time.sleep(0.5)
+    
+    # Clear loader
     loader_placeholder.empty()
     st.session_state.show_page_loader = False
+    st.rerun()
 
 # ---------------- Sidebar Content ----------------
 with st.sidebar:
     # Add logo to sidebar top (سینٹر میں)
     if logo_path.exists():
         st.markdown('<div class="sidebar-logo">', unsafe_allow_html=True)
-        st.image(str(logo_path), width=220)
+        st.image(str(logo_path), width=220)  # Changed from 100 to 220
         st.markdown('</div>', unsafe_allow_html=True)
     
     st.markdown("### Navigation")
@@ -1317,7 +1442,7 @@ def render_categorisation():
         edited = st.data_editor(
             display_df,
             use_container_width=True,
-            hide_index=True,
+            hide-index=True,
             num_rows="fixed",
             key="saved_items_editor",
         )
