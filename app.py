@@ -245,7 +245,7 @@ st.markdown(
 }
 
 .home-logo-container img {
-    max-width: 220px;
+    max-width: 520px;
     height: auto;
     margin: 0 auto;
 }
@@ -304,7 +304,7 @@ logo_path = ROOT / "assets" / "bankcat-logo.jpeg"
 # فقط ہوم پیج پر لوگو دکھائیں
 if active_page == "Home" and logo_path.exists():
     st.markdown('<div class="home-logo-container">', unsafe_allow_html=True)
-    st.image(str(logo_path), width=220)
+    st.image(str(logo_path), width=520)
     st.markdown('</div>', unsafe_allow_html=True)
     # ہوم پیج پر الگ سے ٹائٹل نہیں دکھائیں گے
 else:
@@ -415,7 +415,7 @@ with st.sidebar:
     # Add logo to sidebar top (سینٹر میں)
     if logo_path.exists():
         st.markdown('<div class="sidebar-logo">', unsafe_allow_html=True)
-        st.image(str(logo_path), width=100)
+        st.image(str(logo_path), width=220)
         st.markdown('</div>', unsafe_allow_html=True)
     
     st.markdown("### Navigation")
