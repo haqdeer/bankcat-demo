@@ -1442,7 +1442,7 @@ def render_categorisation():
         edited = st.data_editor(
             display_df,
             use_container_width=True,
-            hide-index=True,
+            hide_index=True,
             num_rows="fixed",
             key="saved_items_editor",
         )
