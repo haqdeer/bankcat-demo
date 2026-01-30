@@ -1,4 +1,4 @@
-# app.py - SIMPLIFIED VERSION - NO CUSTOM HEADER
+# app.py - WITH LOADER FUNCTIONALITY
 import io
 import sys
 import calendar
@@ -6,6 +6,7 @@ import datetime as dt
 import urllib.parse
 import base64
 from pathlib import Path
+import time  # Added for loader
 
 import pandas as pd
 import streamlit as st
@@ -17,6 +18,7 @@ if str(ROOT) not in sys.path:
 
 from src.schema import init_db
 from src import crud
+from src.loader import show_loader, show_simple_loader  # Added loader import
 
 
 def _logo_data_uri(path: Path) -> str:
@@ -201,6 +203,10 @@ def init_session_state():
         "edit_client_mode": st.session_state.get("edit_client_mode", False),
         "standardized_rows": st.session_state.get("standardized_rows", []),
         "categorisation_selected_item": st.session_state.get("categorisation_selected_item"),
+        # Add loader states
+        "app_initialized": st.session_state.get("app_initialized", False),
+        "show_page_loader": st.session_state.get("show_page_loader", False),
+        "previous_page": st.session_state.get("previous_page", None),
     }
     
     for key, default_value in defaults.items():
@@ -239,7 +245,7 @@ st.markdown(
 }
 
 .home-logo-container img {
-    max-width: 520px;
+    max-width: 220px;
     height: auto;
     margin: 0 auto;
 }
@@ -269,6 +275,16 @@ st.markdown(
 .main .block-container {
     padding-top: 1rem !important;
 }
+
+/* Loader animation styles */
+@keyframes fadeIn {
+    from { opacity: 0; }
+    to { opacity: 1; }
+}
+
+.loader-fade-in {
+    animation: fadeIn 0.5s ease-in;
+}
 </style>
 """,
     unsafe_allow_html=True,
@@ -288,28 +304,122 @@ logo_path = ROOT / "assets" / "bankcat-logo.jpeg"
 # فقط ہوم پیج پر لوگو دکھائیں
 if active_page == "Home" and logo_path.exists():
     st.markdown('<div class="home-logo-container">', unsafe_allow_html=True)
-    st.image(str(logo_path), width=520)
+    st.image(str(logo_path), width=220)
     st.markdown('</div>', unsafe_allow_html=True)
     # ہوم پیج پر الگ سے ٹائٹل نہیں دکھائیں گے
 else:
     # دیگر صفحات پر صرف ٹائٹل دکھائیں گے
     st.markdown(f'<h1 class="page-title">{page_title}</h1>', unsafe_allow_html=True)
 
+# ---------------- App Initialization Loader ----------------
+if not st.session_state.app_initialized:
+    # Show full page loader on app startup
+    with st.container():
+        st.markdown(
+            """
+            <style>
+            .full-loader {
+                display: flex;
+                justify-content: center;
+                align-items: center;
+                height: 100vh;
+                width: 100%;
+            }
+            </style>
+            """,
+            unsafe_allow_html=True
+        )
+        
+        # Simple centered loader for startup
+        col1, col2, col3 = st.columns([1, 2, 1])
+        with col2:
+            st.markdown('<div class="loader-fade-in">', unsafe_allow_html=True)
+            loader_path = ROOT / "assets" / "bankcat-loader.gif.svg"
+            if loader_path.exists():
+                st.image(str(loader_path), width=180)
+            else:
+                st.markdown("""
+                <div style="text-align: center; padding: 50px;">
+                    <div style="width: 80px; height: 80px; margin: 0 auto 20px; 
+                        border: 6px solid #f3f3f3; border-top: 6px solid #7CFFB2; 
+                        border-radius: 50%; animation: spin 1.5s linear infinite;">
+                    </div>
+                    <h3 style="color: #4a5568;">Loading BankCat...</h3>
+                </div>
+                <style>
+                @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+                </style>
+                """, unsafe_allow_html=True)
+            st.markdown('</div>', unsafe_allow_html=True)
+    
+    # Simulate initialization
+    time.sleep(1.5)
+    
+    # Mark app as initialized
+    st.session_state.app_initialized = True
+    st.rerun()
+
+# ---------------- Page Transition Handler ----------------
+def handle_page_transition(new_page: str, subpage: str | None = None):
+    """Handle page transitions with loader"""
+    if st.session_state.active_page != new_page:
+        st.session_state.previous_page = st.session_state.active_page
+        st.session_state.active_page = new_page
+        if subpage:
+            st.session_state.active_subpage = subpage
+        st.session_state.show_page_loader = True
+        st.rerun()
+
+# Show page transition loader if needed
+if st.session_state.show_page_loader:
+    loader_placeholder = st.empty()
+    with loader_placeholder.container():
+        st.markdown(
+            """
+            <style>
+            .page-loader {
+                display: flex;
+                justify-content: center;
+                align-items: center;
+                height: 60vh;
+                width: 100%;
+            }
+            </style>
+            """,
+            unsafe_allow_html=True
+        )
+        
+        col1, col2, col3 = st.columns([1, 2, 1])
+        with col2:
+            # Simple spinner animation
+            st.markdown("""
+            <div style="text-align: center;">
+                <div style="width: 60px; height: 60px; margin: 0 auto 20px; 
+                    border: 5px solid #f3f3f3; border-top: 5px solid #7CFFB2; 
+                    border-radius: 50%; animation: spin 1s linear infinite;">
+                </div>
+                <p style="color: #4a5568; font-size: 14px;">Loading page...</p>
+            </div>
+            <style>
+            @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+            </style>
+            """, unsafe_allow_html=True)
+    
+    # Short delay to show loader
+    time.sleep(0.5)
+    loader_placeholder.empty()
+    st.session_state.show_page_loader = False
+
 # ---------------- Sidebar Content ----------------
 with st.sidebar:
     # Add logo to sidebar top (سینٹر میں)
     if logo_path.exists():
         st.markdown('<div class="sidebar-logo">', unsafe_allow_html=True)
-        st.image(str(logo_path), width=220)
+        st.image(str(logo_path), width=100)
         st.markdown('</div>', unsafe_allow_html=True)
     
     st.markdown("### Navigation")
     
-    def _set_active_page(page: str, subpage: str | None = None) -> None:
-        st.session_state.active_page = page
-        st.session_state.active_subpage = subpage
-        st.rerun()
-
     def _button_type(is_active: bool) -> str:
         return "secondary" if is_active else "primary"
 
@@ -329,7 +439,7 @@ with st.sidebar:
             key=f"nav_{page}",
             type=_button_type(is_active),
         ):
-            _set_active_page(page, None)
+            handle_page_transition(page)
 
     # Companies - SIMPLE BUTTON
     companies_active = st.session_state.active_page == "Companies"
@@ -339,7 +449,7 @@ with st.sidebar:
         key="nav_companies",
         type=_button_type(companies_active),
     ):
-        _set_active_page("Companies", "List")
+        handle_page_transition("Companies", "List")
 
     # Setup - EXPANDABLE
     setup_chevron = "▾" if st.session_state.sidebar_setup_open else "▸"
@@ -355,7 +465,7 @@ with st.sidebar:
             st.rerun()
         else:
             st.session_state.sidebar_setup_open = True
-            _set_active_page("Setup", "Banks")
+            handle_page_transition("Setup", "Banks")
     
     if st.session_state.sidebar_setup_open:
         for tab in ["Banks", "Categories"]:
@@ -369,7 +479,8 @@ with st.sidebar:
                 key=f"setup_tab_{tab}",
                 type=_button_type(tab_active),
             ):
-                _set_active_page("Setup", tab)
+                st.session_state.active_subpage = tab
+                st.rerun()
 
     st.markdown("---")
     st.markdown("### 📤 Export")
