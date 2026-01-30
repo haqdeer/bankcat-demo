@@ -365,7 +365,7 @@ def _select_active_client(clients):
     return client_id
 
 def _select_bank(banks_active):
-    bank_options = [f"{b['id']} | {b['bank_name']} ({b['account_type()})" for b in banks_active]
+    bank_options = [f"{b['id']} | {b['bank_name']} ({b['account_type'})" for b in banks_active]
     selected_index = 0
     if st.session_state.bank_id:
         for i, opt in enumerate(bank_options):
