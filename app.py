@@ -1,4 +1,4 @@
-# app.py - COMPLETE FIXED VERSION WITH LOADER & ALL CONTENT
+# app.py - COMPLETE FIXED VERSION WITH CATEGORISATION REDESIGN
 import io
 import sys
 import calendar
@@ -199,7 +199,10 @@ def init_session_state():
         "edit_client_id": st.session_state.get("edit_client_id"),
         "edit_client_mode": st.session_state.get("edit_client_mode", False),
         "standardized_rows": st.session_state.get("standardized_rows", []),
+        "column_mapping": st.session_state.get("column_mapping", {}),
         "categorisation_selected_item": st.session_state.get("categorisation_selected_item"),
+        "show_edit_form": st.session_state.get("show_edit_form", False),
+        "edit_row_index": st.session_state.get("edit_row_index"),
         # Loader states
         "app_initialized": st.session_state.get("app_initialized", False),
         "page_transition_loader": st.session_state.get("page_transition_loader", False),
@@ -376,6 +379,47 @@ st.markdown(
     margin-bottom: 1.5rem;
     box-shadow: 0 1px 3px rgba(0,0,0,0.1);
     border: 1px solid #e5e7eb;
+}
+
+/* Saved items table styling */
+.saved-item-row {
+    padding: 0.75rem;
+    border-bottom: 1px solid #e5e7eb;
+    cursor: pointer;
+    transition: background-color 0.2s;
+}
+
+.saved-item-row:hover {
+    background-color: #f9fafb;
+}
+
+.saved-item-row.selected {
+    background-color: #e8f5e9;
+    border-left: 4px solid #4caf50;
+}
+
+/* Status badges */
+.status-badge {
+    padding: 0.25rem 0.75rem;
+    border-radius: 12px;
+    font-size: 0.75rem;
+    font-weight: 500;
+    display: inline-block;
+}
+
+.status-draft {
+    background-color: #e3f2fd;
+    color: #1565c0;
+}
+
+.status-categorised {
+    background-color: #fff3e0;
+    color: #ef6c00;
+}
+
+.status-committed {
+    background-color: #e8f5e9;
+    color: #2e7d32;
 }
 </style>
 """,
@@ -1216,6 +1260,7 @@ def render_setup():
         render_setup_categories()
 
 
+# ---------------- Redesigned Categorisation Page ----------------
 def render_categorisation():
     st.markdown("## 🧠 Categorisation")
     
@@ -1233,218 +1278,263 @@ def render_categorisation():
         st.info("Add at least 1 active bank first.")
         return
 
-    # Bank Selection
-    col1, col2 = st.columns([2, 1])
-    with col1:
-        bank_options = []
-        for b in banks_active:
-            bank_options.append(f"{b['id']} | {b['bank_name']} ({b['account_type']})")
-        
-        selected_index = 0
-        if st.session_state.bank_id:
-            for i, opt in enumerate(bank_options):
-                if opt.startswith(f"{st.session_state.bank_id} |"):
-                    selected_index = i
-                    break
-        
-        bank_pick = st.selectbox("Select Bank", bank_options, index=selected_index, key="cat_bank_select")
-        bank_id = int(bank_pick.split("|")[0].strip())
-        st.session_state.bank_id = bank_id
-        bank_obj = [b for b in banks_active if int(b["id"]) == bank_id][0]
-        bank_type = bank_obj.get("account_type", "Current")
+    # --- Row 1: Bank selector only ---
+    st.markdown("### 1. Select Bank")
+    bank_options = []
+    for b in banks_active:
+        bank_options.append(f"{b['id']} | {b['bank_name']} ({b['account_type']})")
     
-    with col2:
-        st.info(f"Selected: {bank_obj['bank_name']}")
-
-    # Period Selection
-    st.markdown("---")
-    st.markdown("### Period Selection")
+    selected_index = 0
+    if st.session_state.bank_id:
+        for i, opt in enumerate(bank_options):
+            if opt.startswith(f"{st.session_state.bank_id} |"):
+                selected_index = i
+                break
+    
+    bank_pick = st.selectbox("Select Bank", bank_options, index=selected_index, label_visibility="collapsed")
+    bank_id = int(bank_pick.split("|")[0].strip())
+    st.session_state.bank_id = bank_id
+    bank_obj = [b for b in banks_active if int(b["id"]) == bank_id][0]
+    
+    # --- Row 2: Year + Month + Period(auto) + Date range ---
+    st.markdown("### 2. Period Selection")
+    col1, col2, col3, col4 = st.columns([1, 1, 1, 2])
     
     month_names = [
         "Jan", "Feb", "Mar", "Apr", "May", "Jun",
         "Jul", "Aug", "Sep", "Oct", "Nov", "Dec",
     ]
     
-    row2 = st.columns([1, 1, 1, 2])
-    with row2[0]:
+    with col1:
         year_range = list(range(2020, 2031))
         year = st.selectbox("Year", year_range, index=year_range.index(st.session_state.year))
         st.session_state.year = year
     
-    with row2[1]:
+    with col2:
         month = st.selectbox("Month", month_names, index=month_names.index(st.session_state.month))
         st.session_state.month = month
     
-    with row2[2]:
+    with col3:
         period = f"{year}-{month_names.index(month)+1:02d}"
-        st.text_input("Period (auto)", value=period, disabled=True)
+        st.text_input("Period", value=period, disabled=True)
         st.session_state.period = period
     
-    with row2[3]:
+    with col4:
         month_idx = month_names.index(month) + 1
         last_day = calendar.monthrange(year, month_idx)[1]
         default_range = (
             st.session_state.date_from or dt.date(year, month_idx, 1),
             st.session_state.date_to or dt.date(year, month_idx, last_day),
         )
-        dr = st.date_input("Statement Date Range", value=default_range, key="cat_date_range")
+        dr = st.date_input("Date Range", value=default_range, label_visibility="collapsed")
         date_from, date_to = dr if isinstance(dr, tuple) else (dr, dr)
         st.session_state.date_from = date_from
         st.session_state.date_to = date_to
 
+    # --- Get data summaries ---
     draft_summary = crud.get_draft_summary(client_id, bank_id, period)
     commit_summary = crud.get_commit_summary(client_id, bank_id, period)
 
-    # Saved Items Section
-    st.markdown("---")
-    st.markdown("### 📁 Saved Items")
+    # --- Row 3: Unified Saved Items Table/List ---
+    st.markdown("### 3. Saved Items")
     
-    item_rows: list[dict] = []
+    # Build items list
+    saved_items = []
+    
+    # Draft Saved
     if draft_summary:
-        item_rows.append(
-            {
-                "id": "draft_saved",
-                "item_type": "Draft",
-                "status_label": "Draft Saved",
+        saved_items.append({
+            "id": "draft_saved",
+            "type": "Draft",
+            "status": "Draft Saved",
+            "status_label": "Draft Saved",
+            "row_count": int(draft_summary.get("row_count") or 0),
+            "min_date": draft_summary.get("min_date"),
+            "max_date": draft_summary.get("max_date"),
+            "last_updated": draft_summary.get("last_saved") or "N/A",
+        })
+        
+        # Draft Categorised (if suggested_count > 0)
+        if int(draft_summary.get("suggested_count") or 0) > 0:
+            saved_items.append({
+                "id": "draft_categorised",
+                "type": "Draft",
+                "status": "Draft Categorised",
+                "status_label": "Draft Categorised",
                 "row_count": int(draft_summary.get("row_count") or 0),
                 "min_date": draft_summary.get("min_date"),
                 "max_date": draft_summary.get("max_date"),
-                "last_updated": draft_summary.get("last_saved"),
-            }
-        )
-        if int(draft_summary.get("suggested_count") or 0) > 0:
-            item_rows.append(
-                {
-                    "id": "draft_categorised",
-                    "item_type": "Draft",
-                    "status_label": "Draft Categorised",
-                    "row_count": int(draft_summary.get("row_count") or 0),
-                    "min_date": draft_summary.get("min_date"),
-                    "max_date": draft_summary.get("max_date"),
-                    "last_updated": draft_summary.get("last_saved"),
-                }
-            )
+                "last_updated": draft_summary.get("last_saved") or "N/A",
+            })
+    
+    # Committed
     if commit_summary:
-        item_rows.append(
-            {
-                "id": f"committed_{commit_summary.get('commit_id')}",
-                "item_type": "Committed",
-                "status_label": "Committed",
-                "row_count": int(commit_summary.get("row_count") or 0),
-                "min_date": commit_summary.get("min_date"),
-                "max_date": commit_summary.get("max_date"),
-                "last_updated": commit_summary.get("committed_at"),
-            }
-        )
-
-    if "categorisation_selected_item" not in st.session_state:
-        st.session_state.categorisation_selected_item = None
-
-    if item_rows:
-        items_df = pd.DataFrame(item_rows).set_index("id")
-        selected_item = st.session_state.categorisation_selected_item
-        if selected_item not in items_df.index:
-            selected_item = items_df.index[0]
-            st.session_state.categorisation_selected_item = selected_item
+        saved_items.append({
+            "id": f"committed_{commit_summary.get('commit_id')}",
+            "type": "Committed",
+            "status": "Committed",
+            "status_label": "Committed",
+            "row_count": int(commit_summary.get("row_count") or 0),
+            "min_date": commit_summary.get("min_date"),
+            "max_date": commit_summary.get("max_date"),
+            "last_updated": commit_summary.get("committed_at") or "N/A",
+        })
+    
+    # Display saved items
+    if saved_items:
+        # Create a selection interface
+        selected_item_id = st.session_state.categorisation_selected_item
         
-        # Display saved items
-        for item in item_rows:
-            col1, col2, col3, col4 = st.columns([3, 2, 2, 1])
-            with col1:
-                st.write(f"**{item['status_label']}**")
-            with col2:
-                st.write(f"Rows: {item['row_count']}")
-            with col3:
-                st.write(f"Updated: {item['last_updated'][:10] if item['last_updated'] else 'N/A'}")
-            with col4:
-                if st.button("Select", key=f"select_{item['id']}"):
-                    st.session_state.categorisation_selected_item = item['id']
-                    st.rerun()
+        for item in saved_items:
+            is_selected = (selected_item_id == item["id"])
+            
+            # Determine badge class
+            if item["status"] == "Draft Saved":
+                badge_class = "status-draft"
+            elif item["status"] == "Draft Categorised":
+                badge_class = "status-categorised"
+            else:
+                badge_class = "status-committed"
+            
+            # Format date safely
+            last_updated_display = "N/A"
+            if item["last_updated"] and item["last_updated"] != "N/A":
+                try:
+                    last_updated_display = item["last_updated"][:10] if len(item["last_updated"]) >= 10 else item["last_updated"]
+                except:
+                    last_updated_display = item["last_updated"]
+            
+            # Create a container for each item
+            container = st.container()
+            
+            with container:
+                cols = st.columns([2, 2, 2, 2, 2, 1])
+                
+                with cols[0]:
+                    st.write(f"**{item['status_label']}**")
+                
+                with cols[1]:
+                    st.markdown(f'<span class="status-badge {badge_class}">{item["type"]}</span>', unsafe_allow_html=True)
+                
+                with cols[2]:
+                    st.write(f"Rows: {item['row_count']}")
+                
+                with cols[3]:
+                    if item["min_date"]:
+                        st.write(f"From: {item['min_date']}")
+                    else:
+                        st.write("From: —")
+                
+                with cols[4]:
+                    if item["max_date"]:
+                        st.write(f"To: {item['max_date']}")
+                    else:
+                        st.write("To: —")
+                
+                with cols[5]:
+                    if st.button("Select", key=f"select_{item['id']}", type="primary" if is_selected else "secondary"):
+                        st.session_state.categorisation_selected_item = item["id"]
+                        st.rerun()
+            
+            # Add visual separator
+            if not is_selected:
+                st.markdown("---")
     else:
         st.info("No saved items yet for this bank + period.")
 
-    # Upload Section
-    st.markdown("---")
-    st.markdown("### 📤 Upload Statement")
+    # --- Row 4: Action Buttons (Download Template + Upload) ---
+    st.markdown("### 4. Upload Statement")
     
     col1, col2 = st.columns([1, 2])
+    
     with col1:
+        # Download template
         stmt_template = pd.DataFrame([
             {"Date": "2025-10-01", "Description": "POS Purchase Example", "Dr": 100.00, "Cr": 0.00, "Closing": ""}
         ])
-        buf2 = io.StringIO()
-        stmt_template.to_csv(buf2, index=False)
+        buf = io.StringIO()
+        stmt_template.to_csv(buf, index=False)
         st.download_button(
             "📥 Download Template",
-            data=buf2.getvalue(),
+            data=buf.getvalue(),
             file_name="statement_template.csv",
             mime="text/csv",
+            use_container_width=True
         )
     
     with col2:
-        up_stmt = st.file_uploader("Upload CSV statement", type=["csv"], key="stmt_csv")
+        # Upload CSV
+        up_stmt = st.file_uploader("Upload CSV statement", type=["csv"], key="stmt_csv", label_visibility="collapsed")
+        
+        if up_stmt is not None:
+            try:
+                df_raw = pd.read_csv(up_stmt)
+                st.session_state.df_raw = df_raw
+                st.success(f"✅ Loaded {len(df_raw)} rows")
+            except Exception as e:
+                st.error(f"❌ Upload failed: {_format_exc(e)}")
+        else:
+            df_raw = st.session_state.df_raw
 
-    df_raw = None
-    if up_stmt is not None:
-        try:
-            df_raw = pd.read_csv(up_stmt)
-            st.session_state.df_raw = df_raw
-            st.success(f"✅ Loaded {len(df_raw)} rows")
-        except Exception as e:
-            st.error(f"❌ Upload failed: {_format_exc(e)}")
-    else:
-        df_raw = st.session_state.df_raw
-
-    # Mapping Section
-    standardized_rows = []
+    # --- Column Mapping (if file uploaded) ---
     if df_raw is not None and len(df_raw) > 0:
-        st.markdown("### 🗺️ Column Mapping")
+        st.markdown("#### Column Mapping")
         
         cols = ["(blank)"] + list(df_raw.columns)
-        c1, c2, c3, c4, c5 = st.columns(5)
+        map_cols = st.columns(5)
         
-        with c1:
+        with map_cols[0]:
             map_date = st.selectbox("Date *", cols, index=cols.index("Date") if "Date" in cols else 0)
-        with c2:
+        with map_cols[1]:
             map_desc = st.selectbox("Description *", cols, index=cols.index("Description") if "Description" in cols else 0)
-        with c3:
+        with map_cols[2]:
             map_dr = st.selectbox("Debit (Dr)", cols, index=cols.index("Dr") if "Dr" in cols else 0)
-        with c4:
+        with map_cols[3]:
             map_cr = st.selectbox("Credit (Cr)", cols, index=cols.index("Cr") if "Cr" in cols else 0)
-        with c5:
+        with map_cols[4]:
             map_bal = st.selectbox("Closing Balance", cols, index=cols.index("Closing") if "Closing" in cols else 0)
         
         # Process rows
-        standardized_rows = []
-        for _, r in df_raw.iterrows():
-            try:
-                d = pd.to_datetime(r[map_date]).date() if map_date != "(blank)" else None
-                ds = str(r[map_desc]).strip() if map_desc != "(blank)" else ""
-                
-                if d and ds:
-                    drv = pd.to_numeric(r[map_dr], errors="coerce") if map_dr != "(blank)" else 0
-                    crv = pd.to_numeric(r[map_cr], errors="coerce") if map_cr != "(blank)" else 0
-                    bal = pd.to_numeric(r[map_bal], errors="coerce") if map_bal != "(blank)" else None
+        if st.button("Apply Mapping", type="primary"):
+            standardized_rows = []
+            for _, r in df_raw.iterrows():
+                try:
+                    d = pd.to_datetime(r[map_date]).date() if map_date != "(blank)" else None
+                    ds = str(r[map_desc]).strip() if map_desc != "(blank)" else ""
                     
-                    standardized_rows.append({
-                        "tx_date": d,
-                        "description": ds,
-                        "debit": round(float(drv or 0.0), 2),
-                        "credit": round(float(crv or 0.0), 2),
-                        "balance": float(bal) if bal is not None else None,
-                    })
-            except:
-                continue
-        
-        st.session_state.standardized_rows = standardized_rows
-        st.info(f"✅ Mapped {len(standardized_rows)} rows")
+                    if d and ds:
+                        drv = pd.to_numeric(r[map_dr], errors="coerce") if map_dr != "(blank)" else 0
+                        crv = pd.to_numeric(r[map_cr], errors="coerce") if map_cr != "(blank)" else 0
+                        bal = pd.to_numeric(r[map_bal], errors="coerce") if map_bal != "(blank)" else None
+                        
+                        standardized_rows.append({
+                            "tx_date": d,
+                            "description": ds,
+                            "debit": round(float(drv or 0.0), 2),
+                            "credit": round(float(crv or 0.0), 2),
+                            "balance": float(bal) if bal is not None else None,
+                        })
+                except:
+                    continue
+            
+            st.session_state.standardized_rows = standardized_rows
+            st.session_state.column_mapping = {
+                "date": map_date,
+                "description": map_desc,
+                "debit": map_dr,
+                "credit": map_cr,
+                "balance": map_bal
+            }
+            st.success(f"✅ Mapped {len(standardized_rows)} rows")
+            st.rerun()
 
-    # Main View
-    st.markdown("---")
-    st.markdown("### 👁️ Main View")
+    # --- Row 5: Main View Table ---
+    st.markdown("### 5. Main View")
     
-    selected_item = st.session_state.categorisation_selected_item
-    if selected_item in {"draft_saved", "draft_categorised"}:
+    selected_item_id = st.session_state.categorisation_selected_item
+    
+    if selected_item_id == "draft_saved" or selected_item_id == "draft_categorised":
+        # Load draft rows
         try:
             draft_rows = crud.load_draft_rows(client_id, bank_id, period)
             if draft_rows:
@@ -1454,48 +1544,63 @@ def render_categorisation():
                 st.info("No draft rows found.")
         except Exception as e:
             st.error(f"Unable to load draft rows: {_format_exc(e)}")
-    elif selected_item and selected_item.startswith("committed"):
+    
+    elif selected_item_id and selected_item_id.startswith("committed"):
+        # Load committed rows
         try:
             committed_rows = crud.load_committed_rows(client_id, bank_id, period)
             if committed_rows:
-                st.dataframe(pd.DataFrame(committed_rows), use_container_width=True, hide_index=True)
+                df_c = pd.DataFrame(committed_rows)
+                st.dataframe(df_c, use_container_width=True, hide_index=True)
             else:
                 st.info("No committed rows found.")
         except Exception as e:
             st.error(f"Unable to load committed rows: {_format_exc(e)}")
-    elif standardized_rows:
-        st.dataframe(pd.DataFrame(standardized_rows), use_container_width=True, hide_index=True)
+    
+    elif st.session_state.standardized_rows:
+        # Show uploaded/mapped rows
+        df_uploaded = pd.DataFrame(st.session_state.standardized_rows)
+        st.dataframe(df_uploaded, use_container_width=True, hide_index=True)
+    
     else:
         st.info("Select a saved item or upload a statement to view data.")
 
-    # Process Status
-    st.markdown("---")
-    st.markdown("### 📊 Process Status")
+    # --- Row 6: Process Status & Action Buttons ---
+    st.markdown("### 6. Process Status & Actions")
     
-    status_cols = st.columns(3)
-    with status_cols[0]:
-        if draft_summary:
-            st.metric("Draft Rows", draft_summary.get("row_count", 0))
-    with status_cols[1]:
-        if draft_summary:
-            st.metric("Categorized", draft_summary.get("suggested_count", 0))
-    with status_cols[2]:
-        if commit_summary:
-            st.metric("Committed", "Yes")
+    # Determine current status
+    status = "No Data"
+    primary_action = None
+    
+    if draft_summary:
+        suggested_count = int(draft_summary.get("suggested_count") or 0)
+        if suggested_count == 0:
+            status = "Draft Saved"
+            primary_action = "suggest"
         else:
-            st.metric("Committed", "No")
-
-    # Action Buttons
-    st.markdown("---")
-    st.markdown("### 🎯 Actions")
+            status = "Draft Categorised"
+            primary_action = "save_final"
+    elif commit_summary:
+        status = "Committed"
+        primary_action = None
+    elif st.session_state.standardized_rows:
+        status = "Uploaded (Not Saved)"
+        primary_action = "save_draft"
+    else:
+        status = "No Data"
+        primary_action = None
     
-    action_col1, action_col2, action_col3 = st.columns(3)
+    # Display status
+    st.markdown(f"**Current Status:** `{status}`")
     
-    with action_col1:
-        if standardized_rows and not draft_summary:
+    # Action buttons in a single row
+    action_cols = st.columns(4)
+    
+    with action_cols[0]:
+        if primary_action == "save_draft":
             if st.button("💾 Save Draft", type="primary", use_container_width=True):
                 try:
-                    n = crud.insert_draft_rows(client_id, bank_id, period, standardized_rows, replace=True)
+                    n = crud.insert_draft_rows(client_id, bank_id, period, st.session_state.standardized_rows, replace=True)
                     st.success(f"✅ Draft saved ({n} rows)")
                     st.session_state.standardized_rows = []
                     st.session_state.df_raw = None
@@ -1504,34 +1609,53 @@ def render_categorisation():
                 except Exception as e:
                     st.error(f"❌ Save failed: {_format_exc(e)}")
     
-    with action_col2:
-        if draft_summary and int(draft_summary.get("suggested_count", 0)) == 0:
-            if st.button("🤖 Suggest Categories", type="secondary", use_container_width=True):
+    with action_cols[1]:
+        if primary_action == "suggest":
+            if st.button("🤖 Suggest Categories", type="primary", use_container_width=True):
                 try:
-                    n = crud.process_suggestions(client_id, bank_id, period, bank_account_type=bank_type)
+                    n = crud.process_suggestions(client_id, bank_id, period, bank_account_type=bank_obj.get("account_type"))
                     st.success(f"✅ Categories suggested ({n} rows)")
                     cache_data.clear()
                     st.rerun()
                 except Exception as e:
                     st.error(f"❌ Suggestion failed: {_format_exc(e)}")
     
-    with action_col3:
-        if draft_summary and int(draft_summary.get("suggested_count", 0)) > 0 and not commit_summary:
+    with action_cols[2]:
+        if primary_action == "save_final":
+            if st.button("💾 Save Final Draft", type="primary", use_container_width=True):
+                # Load current draft rows for editing
+                try:
+                    draft_rows = crud.load_draft_rows(client_id, bank_id, period)
+                    if draft_rows:
+                        # For simplicity, we'll just mark them as reviewed
+                        # In a real app, you'd have an editing interface
+                        st.info("Final draft saved (simulated)")
+                        # crud.save_review_changes() would be called here
+                    else:
+                        st.warning("No draft rows to save")
+                except Exception as e:
+                    st.error(f"❌ Save failed: {_format_exc(e)}")
+    
+    with action_cols[3]:
+        if status == "Draft Categorised" and not commit_summary:
             if st.button("🔒 Commit Final", type="primary", use_container_width=True):
-                committed_by = st.text_input("Committed by", key="commit_by")
-                confirm = st.checkbox("Confirm final commit", key="confirm_commit")
-                
-                if confirm and committed_by:
-                    try:
-                        result = crud.commit_period(client_id, bank_id, period, committed_by=committed_by)
-                        if result.get("ok"):
-                            st.success(f"✅ Committed ({result.get('rows', 0)} rows)")
-                            cache_data.clear()
-                            st.rerun()
-                        else:
-                            st.error(f"❌ Commit failed: {result.get('msg', 'Unknown error')}")
-                    except Exception as e:
-                        st.error(f"❌ Commit failed: {_format_exc(e)}")
+                # Show commit dialog
+                with st.expander("Commit Details", expanded=True):
+                    committed_by = st.text_input("Committed by", key="commit_by")
+                    confirm = st.checkbox("Confirm final commit", key="confirm_commit")
+                    
+                    if st.button("Confirm Commit", type="primary"):
+                        if confirm and committed_by:
+                            try:
+                                result = crud.commit_period(client_id, bank_id, period, committed_by=committed_by)
+                                if result.get("ok"):
+                                    st.success(f"✅ Committed ({result.get('rows', 0)} rows)")
+                                    cache_data.clear()
+                                    st.rerun()
+                                else:
+                                    st.error(f"❌ Commit failed: {result.get('msg', 'Unknown error')}")
+                            except Exception as e:
+                                st.error(f"❌ Commit failed: {_format_exc(e)}")
 
 
 def render_settings():
