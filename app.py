@@ -1,4 +1,4 @@
-# app.py - COMPLETE FIXED VERSION WITH CATEGORISATION REDESIGN AND DATA CLEANUP
+# app.py - COMPLETE FIXED VERSION WITH UI ENHANCEMENTS ONLY
 import io
 import sys
 import calendar
@@ -79,6 +79,7 @@ REQUIRED_CRUD_APIS = (
     "list_committed_pl_summary",
     "list_commit_metrics",
     "delete_client_data",  # ✅ NEW DATA CLEANUP FUNCTION
+    "ensure_ask_client_category",  # ✅ ADD THIS LINE - NEW FUNCTION
 )
 
 
@@ -122,6 +123,8 @@ def cached_banks(client_id: int):
 @st.cache_data(ttl=30)
 def cached_categories(client_id: int):
     try:
+        # Ensure Ask Client category exists
+        crud.ensure_ask_client_category(client_id)  # ✅ ADD THIS LINE
         return crud.list_categories(client_id, include_inactive=True)
     except Exception as e:
         st.error(f"Unable to load categories. {_format_exc(e)}")
@@ -208,6 +211,11 @@ def init_session_state():
         "app_initialized": st.session_state.get("app_initialized", False),
         "page_transition_loader": st.session_state.get("page_transition_loader", False),
         "loader_start_time": st.session_state.get("loader_start_time", 0),
+        # NEW: For loading states
+        "processing_suggestions": st.session_state.get("processing_suggestions", False),
+        "processing_commit": st.session_state.get("processing_commit", False),
+        "last_edited_row": st.session_state.get("last_edited_row", None),
+        "last_edit_time": st.session_state.get("last_edit_time", 0),
     }
     
     for key, default_value in defaults.items():
@@ -222,7 +230,7 @@ def init_session_state():
 
 init_session_state()
 
-# ---------------- Loader System ----------------
+# ---------------- Enhanced Loader System ----------------
 def show_loader_instant(duration=1.8, message="LOADING"):
     """Show instant loader that appears immediately"""
     loader_html = f"""
@@ -316,6 +324,45 @@ def show_loader_instant(duration=1.8, message="LOADING"):
     
     return loader_html
 
+def show_progress_loader(message="Processing..."):
+    """Show progress bar loader"""
+    progress_placeholder = st.empty()
+    with progress_placeholder.container():
+        st.markdown(f"""
+        <div style="
+            background: rgba(255, 255, 255, 0.9);
+            padding: 20px;
+            border-radius: 10px;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+            text-align: center;
+            position: fixed;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            z-index: 1000;
+        ">
+            <div style="margin-bottom: 15px;">
+                <div style="
+                    width: 50px;
+                    height: 50px;
+                    margin: 0 auto;
+                    border: 4px solid #f3f3f3;
+                    border-top: 4px solid #7CFFB2;
+                    border-radius: 50%;
+                    animation: spin 1s linear infinite;
+                "></div>
+            </div>
+            <div style="color: #4a5568; font-size: 14px; font-weight: 500;">{message}</div>
+        </div>
+        <style>
+        @keyframes spin {{
+            0% {{ transform: rotate(0deg); }}
+            100% {{ transform: rotate(360deg); }}
+        }}
+        </style>
+        """, unsafe_allow_html=True)
+    return progress_placeholder
+
 # ---------------- App Startup Loader ----------------
 if not st.session_state.app_initialized:
     # Show instant loader
@@ -328,7 +375,7 @@ if not st.session_state.app_initialized:
     time.sleep(2.5)
     st.rerun()
 
-# ---------------- Custom CSS ----------------
+# ---------------- Enhanced Custom CSS ----------------
 st.markdown(
     """
 <style>
@@ -431,6 +478,47 @@ st.markdown(
     border-radius: 4px;
     margin: 1rem 0;
 }
+
+/* NEW: Row highlight animation */
+@keyframes highlightRow {
+    0% { background-color: rgba(124, 255, 178, 0.3); }
+    100% { background-color: transparent; }
+}
+
+.highlight-row {
+    animation: highlightRow 1.5s ease-out;
+}
+
+/* NEW: Processing overlay */
+.processing-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: rgba(255, 255, 255, 0.8);
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    z-index: 9999;
+}
+
+/* NEW: Ask Client special styling */
+.ask-client-category {
+    color: #ff9800 !important;
+    font-weight: 600 !important;
+    font-style: italic !important;
+}
+
+/* NEW: Fade in animation for content */
+@keyframes fadeInContent {
+    from { opacity: 0; transform: translateY(10px); }
+    to { opacity: 1; transform: translateY(0); }
+}
+
+.fade-in-content {
+    animation: fadeInContent 0.3s ease-out;
+}
 </style>
 """,
     unsafe_allow_html=True,
@@ -449,20 +537,20 @@ logo_path = ROOT / "assets" / "bankcat-logo.jpeg"
 
 # فقط ہوم پیج پر لوگو دکھائیں
 if active_page == "Home" and logo_path.exists():
-    st.markdown('<div class="home-logo-container">', unsafe_allow_html=True)
+    st.markdown('<div class="home-logo-container fade-in-content">', unsafe_allow_html=True)
     st.image(str(logo_path), width=520)
     st.markdown('</div>', unsafe_allow_html=True)
     # ہوم پیج پر الگ سے ٹائٹل نہیں دکھائیں گے
 else:
     # دیگر صفحات پر صرف ٹائٹل دکھائیں گے
-    st.markdown(f'<h1 class="page-title">{page_title}</h1>', unsafe_allow_html=True)
+    st.markdown(f'<h1 class="page-title fade-in-content">{page_title}</h1>', unsafe_allow_html=True)
 
 # ---------------- Page Transition Handler ----------------
 def handle_page_transition(new_page: str, subpage: str | None = None):
     """Handle page transitions with loader"""
     if st.session_state.active_page != new_page:
         # Show loader
-        st.markdown(show_loader_instant(1.8, "LOADING PAGE"), unsafe_allow_html=True)
+        st.markdown(show_loader_instant(1.2, "LOADING PAGE"), unsafe_allow_html=True)
         
         # Update page state
         st.session_state.active_page = new_page
@@ -479,9 +567,9 @@ def handle_page_transition(new_page: str, subpage: str | None = None):
 # Check if loader should be shown
 if st.session_state.page_transition_loader:
     elapsed = time.time() - st.session_state.loader_start_time
-    if elapsed < 1.8:
+    if elapsed < 1.2:
         # Still within loader duration
-        time.sleep(1.8 - elapsed)
+        time.sleep(1.2 - elapsed)
     
     # Clear loader state
     st.session_state.page_transition_loader = False
@@ -936,6 +1024,8 @@ def render_companies_add():
         else:
             try:
                 cid = crud.create_client(name, industry, country, desc)
+                # ✅ Ensure Ask Client category exists for new client
+                crud.ensure_ask_client_category(cid)
                 st.success(f"Created client id={cid}")
                 cache_data.clear()
                 st.session_state.active_client_id = cid
@@ -1060,7 +1150,7 @@ def render_setup_banks():
                         edit_bank["id"],
                         bank_name,
                         masked,
-                        acct_type,
+                        account_type,
                         currency,
                         None if has_tx else opening,
                     )
@@ -1270,7 +1360,7 @@ def render_setup():
         render_setup_categories()
 
 
-# ---------------- Redesigned Categorisation Page ----------------
+# ---------------- Enhanced Categorisation Page ----------------
 def render_categorisation():
     st.markdown("## 🧠 Categorisation")
     
@@ -1616,9 +1706,19 @@ def render_categorisation():
                 if draft_rows:
                     df_d = pd.DataFrame(draft_rows)
                     
-                    # Load categories for dropdown
+                    # Load categories for dropdown - INCLUDING ASK CLIENT
                     categories = cached_categories(client_id)
-                    category_names = [c["category_name"] for c in categories if c.get("is_active", True)]
+                    
+                    # Get category names - Ask Client will automatically be included
+                    category_names = []
+                    category_styles = {}  # For styling Ask Client differently
+                    
+                    for c in categories:
+                        if c.get("is_active", True):
+                            cat_name = c.get("category_name", "")
+                            category_names.append(cat_name)
+                            if cat_name.lower() == "ask client":
+                                category_styles[cat_name] = "ask-client-category"
                     
                     # Create editable dataframe with dropdowns
                     edited_df = st.data_editor(
@@ -1652,6 +1752,15 @@ def render_categorisation():
                         hide_index=True,
                         key="draft_editor"
                     )
+                    
+                    # Check for edits and highlight edited rows
+                    if "draft_editor" in st.session_state:
+                        edited_data = st.session_state.draft_editor.get("edited_rows", {})
+                        if edited_data:
+                            # Track last edited row for highlighting
+                            for row_idx in edited_data.keys():
+                                st.session_state.last_edited_row = int(row_idx)
+                                st.session_state.last_edit_time = time.time()
                     
                 else:
                     st.info("No draft rows found.")
@@ -1718,17 +1827,26 @@ def render_categorisation():
             with action_cols[0]:
                 # Suggest Categories button (only if not suggested yet)
                 if suggested_count == 0:
-                    if st.button("🤖 Suggest Categories", type="primary", use_container_width=True):
-                        try:
-                            n = crud.process_suggestions(client_id, bank_id, period, 
-                                                        bank_account_type=bank_obj.get("account_type"))
-                            st.success(f"✅ Categories suggested ({n} rows)")
-                            cache_data.clear()
-                            st.rerun()
-                        except Exception as e:
-                            st.error(f"❌ Suggestion failed: {_format_exc(e)}")
+                    if st.button("🤖 Suggest Categories", type="primary", use_container_width=True, 
+                               disabled=st.session_state.processing_suggestions):
+                        if not st.session_state.processing_suggestions:
+                            st.session_state.processing_suggestions = True
+                            progress = show_progress_loader("Generating AI Suggestions...")
+                            try:
+                                n = crud.process_suggestions(client_id, bank_id, period, 
+                                                            bank_account_type=bank_obj.get("account_type"))
+                                progress.empty()
+                                st.success(f"✅ Categories suggested ({n} rows)")
+                                cache_data.clear()
+                                st.session_state.processing_suggestions = False
+                                st.rerun()
+                            except Exception as e:
+                                progress.empty()
+                                st.error(f"❌ Suggestion failed: {_format_exc(e)}")
+                                st.session_state.processing_suggestions = False
                 else:
-                    if st.button("🔄 Re-suggest Categories", type="secondary", use_container_width=True):
+                    if st.button("🔄 Re-suggest Categories", type="secondary", use_container_width=True,
+                               disabled=st.session_state.processing_suggestions):
                         st.info("Already suggested. Edit categories in the table above.")
             
             with action_cols[1]:
@@ -1767,7 +1885,8 @@ def render_categorisation():
             with action_cols[2]:
                 # Commit button (only if all rows finalised)
                 if final_count >= total_rows and total_rows > 0:
-                    if st.button("🔒 Commit Final", type="primary", use_container_width=True):
+                    if st.button("🔒 Commit Final", type="primary", use_container_width=True,
+                               disabled=st.session_state.processing_commit):
                         # Commit dialog
                         with st.expander("Commit Details", expanded=True):
                             committed_by = st.text_input("Committed by", key="commit_by")
@@ -1775,17 +1894,30 @@ def render_categorisation():
                             
                             if st.button("Confirm Commit", type="primary"):
                                 if confirm and committed_by:
-                                    try:
-                                        result = crud.commit_period(client_id, bank_id, period, 
-                                                                  committed_by=committed_by)
-                                        if result.get("ok"):
-                                            st.success(f"✅ Committed ({result.get('rows', 0)} rows)")
-                                            cache_data.clear()
-                                            st.rerun()
-                                        else:
-                                            st.error(f"❌ Commit failed: {result.get('msg', 'Unknown error')}")
-                                    except Exception as e:
-                                        st.error(f"❌ Commit failed: {_format_exc(e)}")
+                                    if not st.session_state.processing_commit:
+                                        st.session_state.processing_commit = True
+                                        progress = show_progress_loader("Committing transactions...")
+                                        try:
+                                            result = crud.commit_period(client_id, bank_id, period, 
+                                                                      committed_by=committed_by)
+                                            progress.empty()
+                                            if result.get("ok"):
+                                                st.success(f"✅ Committed ({result.get('rows', 0)} rows)")
+                                                cache_data.clear()
+                                                st.session_state.processing_commit = False
+                                                st.rerun()
+                                            else:
+                                                st.error(f"❌ Commit failed: {result.get('msg', 'Unknown error')}")
+                                                st.session_state.processing_commit = False
+                                        except Exception as e:
+                                            progress.empty()
+                                            st.error(f"❌ Commit failed: {_format_exc(e)}")
+                                            st.session_state.processing_commit = False
+                                else:
+                                    if not committed_by:
+                                        st.warning("Please enter 'Committed by' name")
+                                    if not confirm:
+                                        st.warning("Please confirm final commit")
                 else:
                     pending = total_rows - final_count
                     st.info(f"📝 **Finalise {pending} more rows to commit**")
@@ -1961,6 +2093,9 @@ def render_settings():
 def main():
     page = st.session_state.active_page
     
+    # Apply fade-in effect for content
+    st.markdown('<div class="fade-in-content">', unsafe_allow_html=True)
+    
     if page == "Home":
         render_home()
     elif page == "Dashboard":
@@ -1977,6 +2112,23 @@ def main():
         render_settings()
     else:
         render_home()
+    
+    st.markdown('</div>', unsafe_allow_html=True)
+    
+    # Highlight recently edited row (if any)
+    if (st.session_state.last_edited_row is not None and 
+        time.time() - st.session_state.last_edit_time < 1.5):
+        st.markdown(f"""
+        <script>
+        // Highlight the recently edited row
+        setTimeout(function() {{
+            var rows = document.querySelectorAll('[data-testid="stDataFrame"] tbody tr');
+            if (rows.length > {st.session_state.last_edited_row}) {{
+                rows[{st.session_state.last_edited_row}].classList.add('highlight-row');
+            }}
+        }}, 100);
+        </script>
+        """, unsafe_allow_html=True)
 
 
 if __name__ == "__main__":
