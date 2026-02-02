@@ -1600,110 +1600,78 @@ def render_categorisation():
     else:
         st.info("No saved items yet for this bank + period.")
 
-    # --- Row 5: Main View Table (ONLY SHOW IF ITEM SELECTED OR MAPPED DATA EXISTS) ---
+    # --- Check if item is selected ---
     selected_item_id = st.session_state.categorisation_selected_item
+    has_selected_item = bool(selected_item_id)
     
-    # Show uploaded/mapped rows if no item selected but mapped data exists
-    if not selected_item_id and st.session_state.standardized_rows and len(st.session_state.standardized_rows) > 0:
-        st.markdown("### 5. Main View")
-        df_uploaded = pd.DataFrame(st.session_state.standardized_rows)
-        st.info(f"📄 **Mapped Data Preview ({len(df_uploaded)} rows)**")
-        st.dataframe(df_uploaded, use_container_width=True, hide_index=True)
-    
-    # Show selected item data
-    elif selected_item_id and selected_item_id.startswith("draft_"):
+    # --- Row 5: Main View Table (ONLY SHOW IF ITEM SELECTED) ---
+    if has_selected_item:
         st.markdown("### 5. Main View")
         
-        # Load draft rows
-        try:
-            draft_rows = crud.load_draft_rows(client_id, bank_id, period)
-            if draft_rows:
-                df_d = pd.DataFrame(draft_rows)
-                
-                # Load categories for dropdown
-                categories = cached_categories(client_id)
-                category_names = [c["category_name"] for c in categories if c.get("is_active", True)]
-                
-                # Create editable dataframe with dropdowns
-                edited_df = st.data_editor(
-                    df_d,
-                    column_config={
-                        "id": st.column_config.NumberColumn("ID", disabled=True),
-                        "tx_date": st.column_config.DateColumn("Date", disabled=True),
-                        "description": st.column_config.TextColumn("Description", disabled=True),
-                        "debit": st.column_config.NumberColumn("Debit", format="%.2f", disabled=True),
-                        "credit": st.column_config.NumberColumn("Credit", format="%.2f", disabled=True),
-                        "balance": st.column_config.NumberColumn("Balance", format="%.2f", disabled=True),
-                        "suggested_category": st.column_config.TextColumn("AI Category", disabled=True),
-                        "suggested_vendor": st.column_config.TextColumn("AI Vendor", disabled=True),
-                        "confidence": st.column_config.NumberColumn("Confidence", format="%.1f%%", disabled=True),
-                        "final_category": st.column_config.SelectboxColumn(
-                            "Final Category",
-                            options=category_names,
-                            required=False
-                        ),
-                        "final_vendor": st.column_config.TextColumn(
-                            "Final Vendor",
-                            required=False
-                        ),
-                    },
-                    column_order=[
-                        "tx_date", "description", "debit", "credit", 
-                        "suggested_category", "suggested_vendor", "confidence",
-                        "final_category", "final_vendor"
-                    ],
-                    use_container_width=True,
-                    hide_index=True,
-                    key="draft_editor"
-                )
-                
-                # Save changes button
-                if st.button("💾 Save Changes", type="primary", key="save_draft_changes"):
-                    # Convert edited dataframe back to list of dicts
-                    edited_rows = edited_df.to_dict(orient="records")
+        # Show uploaded/mapped rows if no item selected but mapped data exists
+        if selected_item_id and selected_item_id.startswith("draft_"):
+            # Load draft rows
+            try:
+                draft_rows = crud.load_draft_rows(client_id, bank_id, period)
+                if draft_rows:
+                    df_d = pd.DataFrame(draft_rows)
                     
-                    # Prepare rows for saving
-                    rows_to_save = []
-                    for row in edited_rows:
-                        rows_to_save.append({
-                            "id": row["id"],
-                            "final_category": row.get("final_category", ""),
-                            "final_vendor": row.get("final_vendor", "")
-                        })
+                    # Load categories for dropdown
+                    categories = cached_categories(client_id)
+                    category_names = [c["category_name"] for c in categories if c.get("is_active", True)]
                     
-                    # Save changes
-                    try:
-                        updated = crud.save_review_changes(rows_to_save)
-                        st.success(f"✅ Saved {updated} changes")
-                        cache_data.clear()
-                        st.rerun()
-                    except Exception as e:
-                        st.error(f"❌ Save failed: {_format_exc(e)}")
-                
-            else:
-                st.info("No draft rows found.")
-        except Exception as e:
-            st.error(f"Unable to load draft rows: {_format_exc(e)}")
-    
-    elif selected_item_id and selected_item_id.startswith("committed"):
-        st.markdown("### 5. Main View")
+                    # Create editable dataframe with dropdowns
+                    edited_df = st.data_editor(
+                        df_d,
+                        column_config={
+                            "id": st.column_config.NumberColumn("ID", disabled=True),
+                            "tx_date": st.column_config.DateColumn("Date", disabled=True),
+                            "description": st.column_config.TextColumn("Description", disabled=True),
+                            "debit": st.column_config.NumberColumn("Debit", format="%.2f", disabled=True),
+                            "credit": st.column_config.NumberColumn("Credit", format="%.2f", disabled=True),
+                            "balance": st.column_config.NumberColumn("Balance", format="%.2f", disabled=True),
+                            "suggested_category": st.column_config.TextColumn("AI Category", disabled=True),
+                            "suggested_vendor": st.column_config.TextColumn("AI Vendor", disabled=True),
+                            "confidence": st.column_config.NumberColumn("Confidence", format="%.1f%%", disabled=True),
+                            "final_category": st.column_config.SelectboxColumn(
+                                "Final Category",
+                                options=category_names,
+                                required=False
+                            ),
+                            "final_vendor": st.column_config.TextColumn(
+                                "Final Vendor",
+                                required=False
+                            ),
+                        },
+                        column_order=[
+                            "tx_date", "description", "debit", "credit", 
+                            "suggested_category", "suggested_vendor", "confidence",
+                            "final_category", "final_vendor"
+                        ],
+                        use_container_width=True,
+                        hide_index=True,
+                        key="draft_editor"
+                    )
+                    
+                else:
+                    st.info("No draft rows found.")
+            except Exception as e:
+                st.error(f"Unable to load draft rows: {_format_exc(e)}")
         
-        # Load committed rows
-        try:
-            committed_rows = crud.load_committed_rows(client_id, bank_id, period)
-            if committed_rows:
-                df_c = pd.DataFrame(committed_rows)
-                st.dataframe(df_c, use_container_width=True, hide_index=True)
-            else:
-                st.info("No committed rows found.")
-        except Exception as e:
-            st.error(f"Unable to load committed rows: {_format_exc(e)}")
+        elif selected_item_id and selected_item_id.startswith("committed"):
+            # Load committed rows
+            try:
+                committed_rows = crud.load_committed_rows(client_id, bank_id, period)
+                if committed_rows:
+                    df_c = pd.DataFrame(committed_rows)
+                    st.dataframe(df_c, use_container_width=True, hide_index=True)
+                else:
+                    st.info("No committed rows found.")
+            except Exception as e:
+                st.error(f"Unable to load committed rows: {_format_exc(e)}")
     
-    elif draft_summary or commit_summary:
-        st.info("👆 Select an item from 'Saved Items' above to view/edit data")
-
-    # --- Row 6: Progress Summary (ONLY SHOW IF DRAFT EXISTS) ---
-    if draft_summary:
+    # --- Row 6: Progress Summary (ONLY SHOW IF ITEM SELECTED AND DRAFT EXISTS) ---
+    if has_selected_item and draft_summary and selected_item_id.startswith("draft_"):
         st.markdown("### 6. Progress Summary")
         
         total_rows = int(draft_summary.get("row_count") or 0)
@@ -1729,87 +1697,144 @@ def render_categorisation():
             delta_color = "inverse" if pending_rows > 0 else "normal"
             st.metric("Pending Review", pending_rows, f"{pending_pct:.1f}%", delta_color=delta_color)
     
-    # --- Row 7: Action Buttons (DYNAMIC BASED ON STATE) ---
-    st.markdown("### 7. Actions")
-    
-    # Determine current state
-    has_mapped_data = bool(st.session_state.standardized_rows) and len(st.session_state.standardized_rows) > 0
-    has_draft = bool(draft_summary)
-    has_commit = bool(commit_summary)
-    selected_item_id = st.session_state.categorisation_selected_item
-    
-    # Show actions based on state
-    if not has_draft and not has_commit and has_mapped_data:
-        # State: Mapped data ready for draft save
-        st.info("📋 **Ready to save draft**")
-        if st.button("💾 Save Draft", type="primary", use_container_width=True):
-            try:
-                n = crud.insert_draft_rows(client_id, bank_id, period, 
-                                          st.session_state.standardized_rows, replace=True)
-                st.success(f"✅ Draft saved ({n} rows)")
-                # Clear uploaded data after save
-                st.session_state.standardized_rows = []
-                st.session_state.df_raw = None
-                cache_data.clear()
-                st.rerun()
-            except Exception as e:
-                st.error(f"❌ Save failed: {_format_exc(e)}")
-    
-    elif has_draft and not has_commit:
-        # State: Draft exists, not committed yet
-        suggested_count = int(draft_summary.get("suggested_count") or 0)
-        final_count = int(draft_summary.get("final_count") or 0)
-        total_rows = int(draft_summary.get("row_count") or 0)
+    # --- Row 7: Action Buttons (ONLY SHOW IF ITEM SELECTED) ---
+    if has_selected_item:
+        st.markdown("### 7. Actions")
         
-        action_cols = st.columns(3)
+        # Determine current state
+        has_mapped_data = bool(st.session_state.standardized_rows) and len(st.session_state.standardized_rows) > 0
+        has_draft = bool(draft_summary)
+        has_commit = bool(commit_summary)
         
-        with action_cols[0]:
-            # Suggest Categories button (only if not suggested yet)
-            if suggested_count == 0:
-                if st.button("🤖 Suggest Categories", type="primary", use_container_width=True):
-                    try:
-                        n = crud.process_suggestions(client_id, bank_id, period, 
-                                                    bank_account_type=bank_obj.get("account_type"))
-                        st.success(f"✅ Categories suggested ({n} rows)")
-                        cache_data.clear()
-                        st.rerun()
-                    except Exception as e:
-                        st.error(f"❌ Suggestion failed: {_format_exc(e)}")
-        
-        with action_cols[1]:
-            # Save Draft button (always shown when draft exists and selected)
-            if selected_item_id and selected_item_id.startswith("draft_"):
+        if selected_item_id.startswith("draft_"):
+            # Draft selected
+            suggested_count = int(draft_summary.get("suggested_count") or 0)
+            final_count = int(draft_summary.get("final_count") or 0)
+            total_rows = int(draft_summary.get("row_count") or 0)
+            
+            # Create columns for buttons
+            action_cols = st.columns([1, 1, 1])
+            
+            with action_cols[0]:
+                # Suggest Categories button (only if not suggested yet)
+                if suggested_count == 0:
+                    if st.button("🤖 Suggest Categories", type="primary", use_container_width=True):
+                        try:
+                            n = crud.process_suggestions(client_id, bank_id, period, 
+                                                        bank_account_type=bank_obj.get("account_type"))
+                            st.success(f"✅ Categories suggested ({n} rows)")
+                            cache_data.clear()
+                            st.rerun()
+                        except Exception as e:
+                            st.error(f"❌ Suggestion failed: {_format_exc(e)}")
+                else:
+                    if st.button("🔄 Re-suggest Categories", type="secondary", use_container_width=True):
+                        st.info("Already suggested. Edit categories in the table above.")
+            
+            with action_cols[1]:
+                # Save Changes button (always shown when draft selected)
                 if st.button("💾 Save Draft Changes", type="primary", use_container_width=True):
-                    st.info("👆 Make changes in the table above and click 'Save Changes' button")
+                    # Check if we have edited data
+                    if "draft_editor" in st.session_state:
+                        # Get edited data
+                        edited_data = st.session_state.draft_editor["edited_rows"]
+                        if edited_data:
+                            # Prepare rows for saving
+                            rows_to_save = []
+                            for row_idx, changes in edited_data.items():
+                                row_idx = int(row_idx)
+                                if row_idx < len(draft_rows):
+                                    original_row = draft_rows[row_idx]
+                                    rows_to_save.append({
+                                        "id": original_row["id"],
+                                        "final_category": changes.get("final_category", original_row.get("final_category", "")),
+                                        "final_vendor": changes.get("final_vendor", original_row.get("final_vendor", ""))
+                                    })
+                            
+                            # Save changes
+                            try:
+                                updated = crud.save_review_changes(rows_to_save)
+                                st.success(f"✅ Saved {updated} changes")
+                                cache_data.clear()
+                                st.rerun()
+                            except Exception as e:
+                                st.error(f"❌ Save failed: {_format_exc(e)}")
+                        else:
+                            st.info("No changes detected to save.")
+                    else:
+                        st.info("Make changes in the table above first.")
+            
+            with action_cols[2]:
+                # Commit button (only if all rows finalised)
+                if final_count >= total_rows and total_rows > 0:
+                    if st.button("🔒 Commit Final", type="primary", use_container_width=True):
+                        # Commit dialog
+                        with st.expander("Commit Details", expanded=True):
+                            committed_by = st.text_input("Committed by", key="commit_by")
+                            confirm = st.checkbox("Confirm final commit", key="confirm_commit")
+                            
+                            if st.button("Confirm Commit", type="primary"):
+                                if confirm and committed_by:
+                                    try:
+                                        result = crud.commit_period(client_id, bank_id, period, 
+                                                                  committed_by=committed_by)
+                                        if result.get("ok"):
+                                            st.success(f"✅ Committed ({result.get('rows', 0)} rows)")
+                                            cache_data.clear()
+                                            st.rerun()
+                                        else:
+                                            st.error(f"❌ Commit failed: {result.get('msg', 'Unknown error')}")
+                                    except Exception as e:
+                                        st.error(f"❌ Commit failed: {_format_exc(e)}")
+                else:
+                    pending = total_rows - final_count
+                    st.info(f"📝 **Finalise {pending} more rows to commit**")
         
-        with action_cols[2]:
-            # Commit button (only if all rows finalised)
-            if final_count >= total_rows and total_rows > 0:
-                if st.button("🔒 Commit Final", type="primary", use_container_width=True):
-                    # Commit dialog
-                    with st.expander("Commit Details", expanded=True):
-                        committed_by = st.text_input("Committed by", key="commit_by")
-                        confirm = st.checkbox("Confirm final commit", key="confirm_commit")
-                        
-                        if st.button("Confirm Commit", type="primary"):
-                            if confirm and committed_by:
-                                try:
-                                    result = crud.commit_period(client_id, bank_id, period, 
-                                                              committed_by=committed_by)
-                                    if result.get("ok"):
-                                        st.success(f"✅ Committed ({result.get('rows', 0)} rows)")
-                                        cache_data.clear()
-                                        st.rerun()
-                                    else:
-                                        st.error(f"❌ Commit failed: {result.get('msg', 'Unknown error')}")
-                                except Exception as e:
-                                    st.error(f"❌ Commit failed: {_format_exc(e)}")
-            else:
-                st.info(f"📝 **Finalise all {total_rows - final_count} pending rows to commit**")
+        elif selected_item_id.startswith("committed"):
+            # Committed item selected
+            st.success("✅ **Committed & Locked** - This data is now available in Reports")
+            
+            # Show commit info
+            commit_info = crud.list_commit_metrics(
+                client_id=client_id,
+                bank_id=bank_id,
+                period=period,
+                date_from=date_from,
+                date_to=date_to
+            )
+            
+            if commit_info:
+                info = commit_info[0]
+                col1, col2, col3 = st.columns(3)
+                with col1:
+                    st.metric("Rows Committed", info.get("rows_committed", 0))
+                with col2:
+                    st.metric("Accuracy", f"{info.get('accuracy', 0)*100:.1f}%")
+                with col3:
+                    st.metric("Committed By", info.get("committed_by", "N/A"))
     
-    elif has_commit:
-        # State: Already committed
-        st.success("✅ **Already committed** - Data is locked for reporting")
+    # --- Show special message for upload state ---
+    elif not has_selected_item and not draft_summary and not commit_summary:
+        # Show uploaded/mapped data if exists
+        if st.session_state.standardized_rows and len(st.session_state.standardized_rows) > 0:
+            st.markdown("### 5. Mapped Data Preview")
+            df_uploaded = pd.DataFrame(st.session_state.standardized_rows)
+            st.info(f"📄 **Mapped Data ({len(df_uploaded)} rows)** - Ready to save as draft")
+            st.dataframe(df_uploaded, use_container_width=True, hide_index=True)
+            
+            st.markdown("### 6. Save Draft")
+            if st.button("💾 Save Draft", type="primary", use_container_width=True):
+                try:
+                    n = crud.insert_draft_rows(client_id, bank_id, period, 
+                                              st.session_state.standardized_rows, replace=True)
+                    st.success(f"✅ Draft saved ({n} rows)")
+                    # Clear uploaded data after save
+                    st.session_state.standardized_rows = []
+                    st.session_state.df_raw = None
+                    cache_data.clear()
+                    st.rerun()
+                except Exception as e:
+                    st.error(f"❌ Save failed: {_format_exc(e)}")
 
 def render_settings():
     st.markdown("## ⚙️ Settings")
