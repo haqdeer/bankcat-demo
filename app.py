@@ -604,6 +604,9 @@ with st.sidebar:
             key=f"nav_{page}",
             type=_button_type(is_active),
         ):
+            # Collapse Setup if clicking another page
+            if page != "Setup":
+                st.session_state.sidebar_setup_open = False
             handle_page_transition(page)
 
     # Companies - SIMPLE BUTTON
@@ -614,24 +617,32 @@ with st.sidebar:
         key="nav_companies",
         type=_button_type(companies_active),
     ):
+        # Collapse Setup if clicking Companies
+        st.session_state.sidebar_setup_open = False
         handle_page_transition("Companies", "List")
 
     # Setup - EXPANDABLE
+    # Setup - EXPANDABLE
     setup_chevron = "▾" if st.session_state.sidebar_setup_open else "▸"
     setup_active = st.session_state.active_page == "Setup"
+    
     if st.button(
         f"{setup_chevron} 🛠️ Setup",
         use_container_width=True,
         key="toggle_setup",
         type=_button_type(setup_active),
     ):
-        if setup_active:
-            st.session_state.sidebar_setup_open = not st.session_state.sidebar_setup_open
-            st.rerun()
+        # Toggle expand/collapse
+        st.session_state.sidebar_setup_open = not st.session_state.sidebar_setup_open
+        
+        # If we're opening Setup for first time, go to Setup page but DON'T auto-select subpage
+        if st.session_state.sidebar_setup_open and not setup_active:
+            # Go to Setup page but keep subpage as None (user will select)
+            handle_page_transition("Setup", None)
         else:
-            st.session_state.sidebar_setup_open = True
-            handle_page_transition("Setup", "Banks")
+            st.rerun()
     
+    # Setup tabs ONLY show when expanded
     if st.session_state.sidebar_setup_open:
         for tab in ["Banks", "Categories"]:
             tab_active = (
@@ -644,9 +655,11 @@ with st.sidebar:
                 key=f"setup_tab_{tab}",
                 type=_button_type(tab_active),
             ):
+                # Set both page and subpage
+                st.session_state.active_page = "Setup"
                 st.session_state.active_subpage = tab
                 st.rerun()
-
+                
     st.markdown("---")
     st.markdown("### 📤 Export")
     if st.button("Export Transactions", use_container_width=True):
