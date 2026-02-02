@@ -134,6 +134,24 @@ def add_category(client_id: int, name: str, typ: str, nature: str):
         VALUES (:cid,:cc,:cn,:t,:n);
     """, {"cid": client_id, "cc": code, "cn": name.strip(), "t": typ, "n": nature})
 
+def ensure_ask_client_category(client_id: int):
+    """Ensure every client has 'Ask Client' category"""
+    try:
+        # Check if already exists
+        rows = _q("""
+            SELECT id FROM categories 
+            WHERE client_id=:cid AND LOWER(category_name)=LOWER(:name);
+        """, {"cid": client_id, "name": "Ask Client"})
+        
+        if not rows:
+            # Add it
+            code = "CAT-ASK-CLIENT"
+            _exec("""
+                INSERT INTO categories(client_id, category_code, category_name, type, nature)
+                VALUES (:cid,:cc,:cn,'Other','Any');
+            """, {"cid": client_id, "cc": code, "cn": "Ask Client"})
+    except:
+        pass  # Silently ignore if already exists
 
 def bulk_add_categories(client_id: int, rows: List[dict]) -> Tuple[int, int]:
     """
