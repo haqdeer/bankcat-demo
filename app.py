@@ -1,4 +1,4 @@
-# app.py - COMPLETE FIXED VERSION WITH CATEGORISATION REDESIGN
+# app.py - COMPLETE FIXED VERSION WITH CATEGORISATION REDESIGN AND DATA CLEANUP
 import io
 import sys
 import calendar
@@ -78,6 +78,7 @@ REQUIRED_CRUD_APIS = (
     "list_committed_transactions",
     "list_committed_pl_summary",
     "list_commit_metrics",
+    "delete_client_data",  # ✅ NEW DATA CLEANUP FUNCTION
 )
 
 
@@ -420,6 +421,15 @@ st.markdown(
 .status-committed {
     background-color: #e8f5e9;
     color: #2e7d32;
+}
+
+/* Data cleanup warning */
+.cleanup-warning {
+    background-color: #fff8e1;
+    border-left: 4px solid #ff9800;
+    padding: 1rem;
+    border-radius: 4px;
+    margin: 1rem 0;
 }
 </style>
 """,
@@ -1699,6 +1709,84 @@ def render_settings():
         else:
             st.warning("⚠️ Schema mismatch detected")
             st.dataframe(pd.DataFrame(issues), use_container_width=True, hide_index=True)
+    
+    st.markdown("---")
+    st.markdown("### 🗑️ Data Cleanup (Client-wise)")
+    
+    clients = cached_clients()
+    if not clients:
+        st.warning("No clients found for cleanup.")
+        return
+    
+    # Client selection
+    client_options = ["(Select Client)"] + [f"{c['id']} | {c['name']}" for c in clients]
+    selected_client = st.selectbox("Select Client", client_options, key="cleanup_client_select")
+    
+    if selected_client != "(Select Client)":
+        client_id = int(selected_client.split("|")[0].strip())
+        client_name = selected_client.split("|")[1].strip()
+        
+        st.markdown(f"**Selected:** {client_name} (ID: {client_id})")
+        st.markdown("---")
+        
+        # Data type checkboxes
+        st.markdown("#### Select Data to Delete:")
+        
+        col1, col2 = st.columns(2)
+        with col1:
+            delete_banks = st.checkbox("Banks", value=False, key="cleanup_banks")
+            delete_categories = st.checkbox("Categories", value=False, key="cleanup_categories")
+            delete_drafts = st.checkbox("Draft Transactions", value=False, key="cleanup_drafts")
+            delete_committed = st.checkbox("Committed Transactions", value=False, key="cleanup_committed")
+        
+        with col2:
+            delete_vendor_memory = st.checkbox("Vendor Memory", value=False, key="cleanup_vendor_memory")
+            delete_keyword_model = st.checkbox("Keyword Model", value=False, key="cleanup_keyword_model")
+            delete_commits = st.checkbox("Commits History", value=False, key="cleanup_commits")
+            delete_client_itself = st.checkbox("Client Itself", value=False, key="cleanup_client")
+        
+        # Warning message
+        any_selected = (delete_banks or delete_categories or delete_drafts or 
+                       delete_committed or delete_vendor_memory or 
+                       delete_keyword_model or delete_commits or delete_client_itself)
+        
+        if any_selected:
+            st.markdown('<div class="cleanup-warning">', unsafe_allow_html=True)
+            st.warning("⚠️ **WARNING:** This action cannot be undone. Data will be permanently deleted.")
+            st.markdown('</div>', unsafe_allow_html=True)
+            
+            # Confirmation
+            confirm_delete = st.checkbox("I understand this action is irreversible", value=False, key="confirm_delete")
+            
+            if confirm_delete:
+                if st.button("🚨 DELETE SELECTED DATA", type="primary"):
+                    with st.spinner("Deleting data..."):
+                        result = crud.delete_client_data(
+                            client_id=client_id,
+                            delete_banks=delete_banks,
+                            delete_categories=delete_categories,
+                            delete_drafts=delete_drafts,
+                            delete_committed=delete_committed,
+                            delete_vendor_memory=delete_vendor_memory,
+                            delete_keyword_model=delete_keyword_model,
+                            delete_commits=delete_commits,
+                            delete_client_itself=delete_client_itself,
+                        )
+                    
+                    if result["ok"]:
+                        st.success("✅ Data deleted successfully!")
+                        if "deleted" in result:
+                            st.markdown("**Deleted counts:**")
+                            for table, count in result["deleted"].items():
+                                st.write(f"- {table}: {count} rows")
+                        
+                        # Clear cache and refresh
+                        cache_data.clear()
+                        st.rerun()
+                    else:
+                        st.error(f"❌ Delete failed: {result.get('error', 'Unknown error')}")
+    else:
+        st.info("Select a client to see cleanup options.")
 
 
 # ---------------- Main Page Router ----------------
