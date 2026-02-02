@@ -403,75 +403,54 @@ def _tokenize(desc: str) -> List[str]:
 def process_suggestions(client_id: int, bank_id: int, period: str, bank_account_type: str = "Current") -> int:
     """
     Fill suggested_category/vendor/confidence/reason.
-    Very simple rule engine:
-      1) Vendor memory (if vendor extracted) else keyword weights
-      2) Nature heuristic: credit tends to Income, debit tends to Expense
+    Uses enhanced engine.py for better suggestions.
     """
     cats = list_categories(client_id, include_inactive=False)
-    cat_names_income = [c["category_name"] for c in cats if c["type"] == "Income"]
-    cat_names_exp = [c["category_name"] for c in cats if c["type"] == "Expense"]
-    fallback_income = cat_names_income[0] if cat_names_income else "Income"
-    fallback_exp = cat_names_exp[0] if cat_names_exp else "Expense"
-
+    
+    # Skip if no categories
+    if not cats:
+        return 0
+    
     vm = {v["vendor_key"]: v for v in list_vendor_memory(client_id)}
     kw = keyword_weights(client_id)
-    # build token -> best category
-    token_best: Dict[str, Tuple[str, float]] = {}
-    for r in kw:
-        t = r["token"]
-        c = r["category"]
-        w = float(r["weight"] or 0)
-        if t not in token_best or w > token_best[t][1]:
-            token_best[t] = (c, w)
-
+    
+    # Use enhanced engine
+    from src import engine
+    
     draft = load_draft(client_id, bank_id, period)
     updated = 0
-
+    
     for row in draft:
         desc = row["description"] or ""
         debit = float(row.get("debit") or 0)
         credit = float(row.get("credit") or 0)
-
-        # crude vendor extraction: take first 3-6 tokens as "vendor-ish"
-        toks = _tokenize(desc)
-        vendor_guess = " ".join(toks[:4]).title() if toks else None
-
-        suggested_cat = None
-        confidence = 0.40
-        reason = "Heuristic"
-
-        # 1) vendor memory match
-        vendor_key = _normalize_vendor_key(vendor_guess)
-        if vendor_key and vendor_key in vm:
-            suggested_cat = vm[vendor_key]["category"]
-            confidence = float(vm[vendor_key]["confidence"])
-            reason = "Vendor memory"
-        else:
-            # 2) keyword weight
-            best_cat = None
-            best_score = 0.0
-            for t in toks:
-                if t in token_best:
-                    c, w = token_best[t]
-                    if w > best_score:
-                        best_score = w
-                        best_cat = c
-            if best_cat:
-                suggested_cat = best_cat
-                confidence = max(0.55, min(0.95, 0.55 + (best_score / 10.0)))
-                reason = "Keyword model"
-
-        # 3) nature/account type fallback
+        
+        # Get suggestion from enhanced engine
+        suggested_cat, suggested_vendor, confidence, reason = engine.suggest_one(
+            desc=desc,
+            debit=debit,
+            credit=credit,
+            bank_account_type=bank_account_type,
+            categories=cats,
+            vendor_memory=list(vm.values()),  # Pass as list
+            keyword_weights=kw,
+        )
+        
+        # If no suggestion, use fallback
         if not suggested_cat:
+            # Simple fallback logic
             if credit > 0 and debit == 0:
-                suggested_cat = fallback_income
-                confidence = 0.55
-                reason = "Nature+account-type heuristic"
+                income_cats = [c for c in cats if c["type"] == "Income"]
+                suggested_cat = income_cats[0]["category_name"] if income_cats else "Income"
+                confidence = 0.45
+                reason = "Fallback: Credit → Income"
             else:
-                suggested_cat = fallback_exp
-                confidence = 0.55
-                reason = "Nature+account-type heuristic"
-
+                expense_cats = [c for c in cats if c["type"] == "Expense"]
+                suggested_cat = expense_cats[0]["category_name"] if expense_cats else "Expense"
+                confidence = 0.45
+                reason = "Fallback: Debit → Expense"
+        
+        # Update database
         _exec("""
             UPDATE transactions_draft
             SET suggested_category=:sc,
@@ -482,15 +461,14 @@ def process_suggestions(client_id: int, bank_id: int, period: str, bank_account_
             WHERE id=:id;
         """, {
             "sc": suggested_cat,
-            "sv": vendor_guess,
+            "sv": suggested_vendor,
             "cf": confidence,
             "rs": reason,
             "id": row["id"],
         })
         updated += 1
-
+    
     return updated
-
 
 # ---------------- Commit / Lock / Learn ----------------
 def committed_sample(client_id: int, bank_id: int, period: str, limit: int = 200) -> List[dict]:
