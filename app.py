@@ -1345,137 +1345,138 @@ def render_categorisation():
     draft_summary = crud.get_draft_summary(client_id, bank_id, period)
     commit_summary = crud.get_commit_summary(client_id, bank_id, period)
 
-    # --- Row 3: Upload & Mapping Section ---
-    st.markdown("### 3. Upload Statement")
-    
-    col1, col2 = st.columns([1, 2])
-    
-    with col1:
-        # Download template
-        stmt_template = pd.DataFrame([
-            {"Date": "2025-10-01", "Description": "POS Purchase Example", "Dr": 100.00, "Cr": 0.00, "Closing": ""}
-        ])
-        buf = io.StringIO()
-        stmt_template.to_csv(buf, index=False)
-        st.download_button(
-            "📥 Download Template",
-            data=buf.getvalue(),
-            file_name="statement_template.csv",
-            mime="text/csv",
-            use_container_width=True
-        )
-    
-    with col2:
-        # Upload CSV
-        up_stmt = st.file_uploader("Upload CSV statement", type=["csv"], key="stmt_csv", label_visibility="collapsed")
+    # --- Row 3: Upload & Mapping Section (ONLY SHOW IF NO DRAFT/COMMIT EXISTS) ---
+    if not draft_summary and not commit_summary:
+        st.markdown("### 3. Upload Statement")
         
-        if up_stmt is not None:
-            try:
-                df_raw = pd.read_csv(up_stmt)
-                st.session_state.df_raw = df_raw
-                st.success(f"✅ Loaded {len(df_raw)} rows")
-            except Exception as e:
-                st.error(f"❌ Upload failed: {_format_exc(e)}")
-        else:
-            df_raw = st.session_state.df_raw
+        col1, col2 = st.columns([1, 2])
+        
+        with col1:
+            # Download template
+            stmt_template = pd.DataFrame([
+                {"Date": "2025-10-01", "Description": "POS Purchase Example", "Dr": 100.00, "Cr": 0.00, "Closing": ""}
+            ])
+            buf = io.StringIO()
+            stmt_template.to_csv(buf, index=False)
+            st.download_button(
+                "📥 Download Template",
+                data=buf.getvalue(),
+                file_name="statement_template.csv",
+                mime="text/csv",
+                use_container_width=True
+            )
+        
+        with col2:
+            # Upload CSV
+            up_stmt = st.file_uploader("Upload CSV statement", type=["csv"], key="stmt_csv", label_visibility="collapsed")
+            
+            if up_stmt is not None:
+                try:
+                    df_raw = pd.read_csv(up_stmt)
+                    st.session_state.df_raw = df_raw
+                    st.success(f"✅ Loaded {len(df_raw)} rows")
+                except Exception as e:
+                    st.error(f"❌ Upload failed: {_format_exc(e)}")
+            else:
+                df_raw = st.session_state.df_raw
 
-    # --- Column Mapping (if file uploaded) ---
-    if df_raw is not None and len(df_raw) > 0:
-        st.markdown("#### Column Mapping")
-        
-        cols = ["(blank)"] + list(df_raw.columns)
-        map_cols = st.columns(5)
-        
-        with map_cols[0]:
-            map_date = st.selectbox("Date *", cols, index=cols.index("Date") if "Date" in cols else 0)
-        with map_cols[1]:
-            map_desc = st.selectbox("Description *", cols, index=cols.index("Description") if "Description" in cols else 0)
-        with map_cols[2]:
-            map_dr = st.selectbox("Debit (Dr)", cols, index=cols.index("Dr") if "Dr" in cols else 0)
-        with map_cols[3]:
-            map_cr = st.selectbox("Credit (Cr)", cols, index=cols.index("Cr") if "Cr" in cols else 0)
-        with map_cols[4]:
-            map_bal = st.selectbox("Closing Balance", cols, index=cols.index("Closing") if "Closing" in cols else 0)
-        
-        # Improved date parsing function
-        def _to_date(x):
-            if pd.isna(x):
-                return None
-            try:
-                if isinstance(x, str):
-                    x_str = str(x).strip()
-                    # Try multiple date formats
-                    for fmt in ["%Y-%m-%d", "%d/%m/%Y", "%m/%d/%Y", "%d-%m-%Y", "%Y/%m/%d", "%d %b %Y", "%d %B %Y"]:
-                        try:
-                            return dt.datetime.strptime(x_str, fmt).date()
-                        except:
-                            continue
-                    # Try just extracting date parts
-                    if "/" in x_str:
-                        parts = x_str.split("/")
-                        if len(parts) == 3:
-                            if len(parts[2]) == 4:  # Has year
-                                return dt.date(int(parts[2]), int(parts[1]), int(parts[0]))
-                return pd.to_datetime(x, dayfirst=True).date()
-            except Exception:
-                return None
-        
-        # Process rows button
-        if st.button("Apply Mapping", type="primary", key="apply_mapping"):
-            standardized_rows = []
-            dropped_missing_date = 0
-            dropped_missing_desc = 0
+        # --- Column Mapping (if file uploaded) ---
+        if df_raw is not None and len(df_raw) > 0:
+            st.markdown("#### Column Mapping")
             
-            for idx, r in df_raw.iterrows():
-                # Parse date
-                d = _to_date(r[map_date]) if map_date != "(blank)" else None
-                ds = str(r[map_desc]).strip() if map_desc != "(blank)" else ""
-                
-                # If date missing, use period start date
-                if not d and ds:
-                    d = dt.date(year, month_names.index(month) + 1, 1)
-                    dropped_missing_date += 1
-                
-                # Drop if description missing
-                if not ds:
-                    dropped_missing_desc += 1
-                    continue
-                
-                # Parse amounts
-                drv = pd.to_numeric(r[map_dr], errors="coerce") if map_dr != "(blank)" else 0
-                crv = pd.to_numeric(r[map_cr], errors="coerce") if map_cr != "(blank)" else 0
-                bal = pd.to_numeric(r[map_bal], errors="coerce") if map_bal != "(blank)" else None
-                
-                standardized_rows.append({
-                    "tx_date": d,
-                    "description": ds,
-                    "debit": round(float(drv or 0.0), 2),
-                    "credit": round(float(crv or 0.0), 2),
-                    "balance": float(bal) if bal is not None else None,
-                })
+            cols = ["(blank)"] + list(df_raw.columns)
+            map_cols = st.columns(5)
             
-            st.session_state.standardized_rows = standardized_rows
-            st.session_state.column_mapping = {
-                "date": map_date,
-                "description": map_desc,
-                "debit": map_dr,
-                "credit": map_cr,
-                "balance": map_bal
-            }
+            with map_cols[0]:
+                map_date = st.selectbox("Date *", cols, index=cols.index("Date") if "Date" in cols else 0)
+            with map_cols[1]:
+                map_desc = st.selectbox("Description *", cols, index=cols.index("Description") if "Description" in cols else 0)
+            with map_cols[2]:
+                map_dr = st.selectbox("Debit (Dr)", cols, index=cols.index("Dr") if "Dr" in cols else 0)
+            with map_cols[3]:
+                map_cr = st.selectbox("Credit (Cr)", cols, index=cols.index("Cr") if "Cr" in cols else 0)
+            with map_cols[4]:
+                map_bal = st.selectbox("Closing Balance", cols, index=cols.index("Closing") if "Closing" in cols else 0)
             
-            # Show detailed statistics
-            st.success(f"✅ Mapped {len(standardized_rows)} rows")
-            st.info(f"""
-            **Mapping Summary:**
-            - Original rows: {len(df_raw)}
-            - Successfully mapped: {len(standardized_rows)}
-            - Rows with missing date (used period default): {dropped_missing_date}
-            - Rows dropped (missing description): {dropped_missing_desc}
-            """)
+            # Improved date parsing function
+            def _to_date(x):
+                if pd.isna(x):
+                    return None
+                try:
+                    if isinstance(x, str):
+                        x_str = str(x).strip()
+                        # Try multiple date formats
+                        for fmt in ["%Y-%m-%d", "%d/%m/%Y", "%m/%d/%Y", "%d-%m-%Y", "%Y/%m/%d", "%d %b %Y", "%d %B %Y"]:
+                            try:
+                                return dt.datetime.strptime(x_str, fmt).date()
+                            except:
+                                continue
+                        # Try just extracting date parts
+                        if "/" in x_str:
+                            parts = x_str.split("/")
+                            if len(parts) == 3:
+                                if len(parts[2]) == 4:  # Has year
+                                    return dt.date(int(parts[2]), int(parts[1]), int(parts[0]))
+                    return pd.to_datetime(x, dayfirst=True).date()
+                except Exception:
+                    return None
             
-            # Clear any selected item
-            st.session_state.categorisation_selected_item = None
-            st.rerun()
+            # Process rows button
+            if st.button("Apply Mapping", type="primary", key="apply_mapping"):
+                standardized_rows = []
+                dropped_missing_date = 0
+                dropped_missing_desc = 0
+                
+                for idx, r in df_raw.iterrows():
+                    # Parse date
+                    d = _to_date(r[map_date]) if map_date != "(blank)" else None
+                    ds = str(r[map_desc]).strip() if map_desc != "(blank)" else ""
+                    
+                    # If date missing, use period start date
+                    if not d and ds:
+                        d = dt.date(year, month_names.index(month) + 1, 1)
+                        dropped_missing_date += 1
+                    
+                    # Drop if description missing
+                    if not ds:
+                        dropped_missing_desc += 1
+                        continue
+                    
+                    # Parse amounts
+                    drv = pd.to_numeric(r[map_dr], errors="coerce") if map_dr != "(blank)" else 0
+                    crv = pd.to_numeric(r[map_cr], errors="coerce") if map_cr != "(blank)" else 0
+                    bal = pd.to_numeric(r[map_bal], errors="coerce") if map_bal != "(blank)" else None
+                    
+                    standardized_rows.append({
+                        "tx_date": d,
+                        "description": ds,
+                        "debit": round(float(drv or 0.0), 2),
+                        "credit": round(float(crv or 0.0), 2),
+                        "balance": float(bal) if bal is not None else None,
+                    })
+                
+                st.session_state.standardized_rows = standardized_rows
+                st.session_state.column_mapping = {
+                    "date": map_date,
+                    "description": map_desc,
+                    "debit": map_dr,
+                    "credit": map_cr,
+                    "balance": map_bal
+                }
+                
+                # Show detailed statistics
+                st.success(f"✅ Mapped {len(standardized_rows)} rows")
+                st.info(f"""
+                **Mapping Summary:**
+                - Original rows: {len(df_raw)}
+                - Successfully mapped: {len(standardized_rows)}
+                - Rows with missing date (used period default): {dropped_missing_date}
+                - Rows dropped (missing description): {dropped_missing_desc}
+                """)
+                
+                # Clear any selected item
+                st.session_state.categorisation_selected_item = None
+                st.rerun()
 
     # --- Row 4: Saved Items Display ---
     st.markdown("### 4. Saved Items")
@@ -1599,10 +1600,112 @@ def render_categorisation():
     else:
         st.info("No saved items yet for this bank + period.")
 
-    # --- Row 5: Progress Summary ---
-    st.markdown("### 5. Progress Summary")
+    # --- Row 5: Main View Table (ONLY SHOW IF ITEM SELECTED OR MAPPED DATA EXISTS) ---
+    selected_item_id = st.session_state.categorisation_selected_item
     
+    # Show uploaded/mapped rows if no item selected but mapped data exists
+    if not selected_item_id and st.session_state.standardized_rows and len(st.session_state.standardized_rows) > 0:
+        st.markdown("### 5. Main View")
+        df_uploaded = pd.DataFrame(st.session_state.standardized_rows)
+        st.info(f"📄 **Mapped Data Preview ({len(df_uploaded)} rows)**")
+        st.dataframe(df_uploaded, use_container_width=True, hide_index=True)
+    
+    # Show selected item data
+    elif selected_item_id and selected_item_id.startswith("draft_"):
+        st.markdown("### 5. Main View")
+        
+        # Load draft rows
+        try:
+            draft_rows = crud.load_draft_rows(client_id, bank_id, period)
+            if draft_rows:
+                df_d = pd.DataFrame(draft_rows)
+                
+                # Load categories for dropdown
+                categories = cached_categories(client_id)
+                category_names = [c["category_name"] for c in categories if c.get("is_active", True)]
+                
+                # Create editable dataframe with dropdowns
+                edited_df = st.data_editor(
+                    df_d,
+                    column_config={
+                        "id": st.column_config.NumberColumn("ID", disabled=True),
+                        "tx_date": st.column_config.DateColumn("Date", disabled=True),
+                        "description": st.column_config.TextColumn("Description", disabled=True),
+                        "debit": st.column_config.NumberColumn("Debit", format="%.2f", disabled=True),
+                        "credit": st.column_config.NumberColumn("Credit", format="%.2f", disabled=True),
+                        "balance": st.column_config.NumberColumn("Balance", format="%.2f", disabled=True),
+                        "suggested_category": st.column_config.TextColumn("AI Category", disabled=True),
+                        "suggested_vendor": st.column_config.TextColumn("AI Vendor", disabled=True),
+                        "confidence": st.column_config.NumberColumn("Confidence", format="%.1f%%", disabled=True),
+                        "final_category": st.column_config.SelectboxColumn(
+                            "Final Category",
+                            options=category_names,
+                            required=False
+                        ),
+                        "final_vendor": st.column_config.TextColumn(
+                            "Final Vendor",
+                            required=False
+                        ),
+                    },
+                    column_order=[
+                        "tx_date", "description", "debit", "credit", 
+                        "suggested_category", "suggested_vendor", "confidence",
+                        "final_category", "final_vendor"
+                    ],
+                    use_container_width=True,
+                    hide_index=True,
+                    key="draft_editor"
+                )
+                
+                # Save changes button
+                if st.button("💾 Save Changes", type="primary", key="save_draft_changes"):
+                    # Convert edited dataframe back to list of dicts
+                    edited_rows = edited_df.to_dict(orient="records")
+                    
+                    # Prepare rows for saving
+                    rows_to_save = []
+                    for row in edited_rows:
+                        rows_to_save.append({
+                            "id": row["id"],
+                            "final_category": row.get("final_category", ""),
+                            "final_vendor": row.get("final_vendor", "")
+                        })
+                    
+                    # Save changes
+                    try:
+                        updated = crud.save_review_changes(rows_to_save)
+                        st.success(f"✅ Saved {updated} changes")
+                        cache_data.clear()
+                        st.rerun()
+                    except Exception as e:
+                        st.error(f"❌ Save failed: {_format_exc(e)}")
+                
+            else:
+                st.info("No draft rows found.")
+        except Exception as e:
+            st.error(f"Unable to load draft rows: {_format_exc(e)}")
+    
+    elif selected_item_id and selected_item_id.startswith("committed"):
+        st.markdown("### 5. Main View")
+        
+        # Load committed rows
+        try:
+            committed_rows = crud.load_committed_rows(client_id, bank_id, period)
+            if committed_rows:
+                df_c = pd.DataFrame(committed_rows)
+                st.dataframe(df_c, use_container_width=True, hide_index=True)
+            else:
+                st.info("No committed rows found.")
+        except Exception as e:
+            st.error(f"Unable to load committed rows: {_format_exc(e)}")
+    
+    elif draft_summary or commit_summary:
+        st.info("👆 Select an item from 'Saved Items' above to view/edit data")
+
+    # --- Row 6: Progress Summary (ONLY SHOW IF DRAFT EXISTS) ---
     if draft_summary:
+        st.markdown("### 6. Progress Summary")
+        
         total_rows = int(draft_summary.get("row_count") or 0)
         suggested_rows = int(draft_summary.get("suggested_count") or 0)
         final_rows = int(draft_summary.get("final_count") or 0)
@@ -1626,89 +1729,42 @@ def render_categorisation():
             delta_color = "inverse" if pending_rows > 0 else "normal"
             st.metric("Pending Review", pending_rows, f"{pending_pct:.1f}%", delta_color=delta_color)
     
-    elif st.session_state.standardized_rows:
-        total_rows = len(st.session_state.standardized_rows)
-        st.info(f"📋 **Ready to save:** {total_rows} rows mapped and ready for draft save")
-    else:
-        st.info("Upload and map a statement to see progress")
-
-    # --- Row 6: Main View Table ---
-    st.markdown("### 6. Main View")
-    
-    selected_item_id = st.session_state.categorisation_selected_item
-    
-    # Show uploaded/mapped rows if no item selected
-    if not selected_item_id and st.session_state.standardized_rows:
-        df_uploaded = pd.DataFrame(st.session_state.standardized_rows)
-        st.info(f"📄 **Mapped Data Preview ({len(df_uploaded)} rows)**")
-        st.dataframe(df_uploaded, use_container_width=True, hide_index=True)
-    
-    # Show selected item data
-    elif selected_item_id and selected_item_id.startswith("draft_"):
-        # Load draft rows
-        try:
-            draft_rows = crud.load_draft_rows(client_id, bank_id, period)
-            if draft_rows:
-                df_d = pd.DataFrame(draft_rows)
-                
-                # Show only essential columns
-                display_cols = ["tx_date", "description", "debit", "credit", 
-                              "suggested_category", "suggested_vendor", "confidence",
-                              "final_category", "final_vendor"]
-                
-                # Filter to available columns
-                available_cols = [c for c in display_cols if c in df_d.columns]
-                st.dataframe(df_d[available_cols], use_container_width=True, hide_index=True)
-            else:
-                st.info("No draft rows found.")
-        except Exception as e:
-            st.error(f"Unable to load draft rows: {_format_exc(e)}")
-    
-    elif selected_item_id and selected_item_id.startswith("committed"):
-        # Load committed rows
-        try:
-            committed_rows = crud.load_committed_rows(client_id, bank_id, period)
-            if committed_rows:
-                df_c = pd.DataFrame(committed_rows)
-                st.dataframe(df_c, use_container_width=True, hide_index=True)
-            else:
-                st.info("No committed rows found.")
-        except Exception as e:
-            st.error(f"Unable to load committed rows: {_format_exc(e)}")
-    
-    else:
-        st.info("Select a saved item or upload/map a statement to view data")
-
-    # --- Row 7: Action Buttons ---
+    # --- Row 7: Action Buttons (DYNAMIC BASED ON STATE) ---
     st.markdown("### 7. Actions")
     
     # Determine current state
-    has_mapped_data = bool(st.session_state.standardized_rows)
+    has_mapped_data = bool(st.session_state.standardized_rows) and len(st.session_state.standardized_rows) > 0
     has_draft = bool(draft_summary)
     has_commit = bool(commit_summary)
+    selected_item_id = st.session_state.categorisation_selected_item
     
-    # Action buttons layout
-    action_cols = st.columns(3)
+    # Show actions based on state
+    if not has_draft and not has_commit and has_mapped_data:
+        # State: Mapped data ready for draft save
+        st.info("📋 **Ready to save draft**")
+        if st.button("💾 Save Draft", type="primary", use_container_width=True):
+            try:
+                n = crud.insert_draft_rows(client_id, bank_id, period, 
+                                          st.session_state.standardized_rows, replace=True)
+                st.success(f"✅ Draft saved ({n} rows)")
+                # Clear uploaded data after save
+                st.session_state.standardized_rows = []
+                st.session_state.df_raw = None
+                cache_data.clear()
+                st.rerun()
+            except Exception as e:
+                st.error(f"❌ Save failed: {_format_exc(e)}")
     
-    with action_cols[0]:
-        # Save Draft button (only if mapped data exists)
-        if has_mapped_data and not has_draft:
-            if st.button("💾 Save Draft", type="primary", use_container_width=True):
-                try:
-                    n = crud.insert_draft_rows(client_id, bank_id, period, 
-                                              st.session_state.standardized_rows, replace=True)
-                    st.success(f"✅ Draft saved ({n} rows)")
-                    st.session_state.standardized_rows = []
-                    st.session_state.df_raw = None
-                    cache_data.clear()
-                    st.rerun()
-                except Exception as e:
-                    st.error(f"❌ Save failed: {_format_exc(e)}")
-    
-    with action_cols[1]:
-        # Suggest Categories button (only if draft exists without suggestions)
-        if has_draft and draft_summary:
-            suggested_count = int(draft_summary.get("suggested_count") or 0)
+    elif has_draft and not has_commit:
+        # State: Draft exists, not committed yet
+        suggested_count = int(draft_summary.get("suggested_count") or 0)
+        final_count = int(draft_summary.get("final_count") or 0)
+        total_rows = int(draft_summary.get("row_count") or 0)
+        
+        action_cols = st.columns(3)
+        
+        with action_cols[0]:
+            # Suggest Categories button (only if not suggested yet)
             if suggested_count == 0:
                 if st.button("🤖 Suggest Categories", type="primary", use_container_width=True):
                     try:
@@ -1719,14 +1775,16 @@ def render_categorisation():
                         st.rerun()
                     except Exception as e:
                         st.error(f"❌ Suggestion failed: {_format_exc(e)}")
-    
-    with action_cols[2]:
-        # Commit button (only if draft is finalised)
-        if has_draft and draft_summary and not has_commit:
-            total_rows = int(draft_summary.get("row_count") or 0)
-            final_rows = int(draft_summary.get("final_count") or 0)
-            
-            if final_rows >= total_rows and total_rows > 0:
+        
+        with action_cols[1]:
+            # Save Draft button (always shown when draft exists and selected)
+            if selected_item_id and selected_item_id.startswith("draft_"):
+                if st.button("💾 Save Draft Changes", type="primary", use_container_width=True):
+                    st.info("👆 Make changes in the table above and click 'Save Changes' button")
+        
+        with action_cols[2]:
+            # Commit button (only if all rows finalised)
+            if final_count >= total_rows and total_rows > 0:
                 if st.button("🔒 Commit Final", type="primary", use_container_width=True):
                     # Commit dialog
                     with st.expander("Commit Details", expanded=True):
@@ -1746,7 +1804,12 @@ def render_categorisation():
                                         st.error(f"❌ Commit failed: {result.get('msg', 'Unknown error')}")
                                 except Exception as e:
                                     st.error(f"❌ Commit failed: {_format_exc(e)}")
-
+            else:
+                st.info(f"📝 **Finalise all {total_rows - final_count} pending rows to commit**")
+    
+    elif has_commit:
+        # State: Already committed
+        st.success("✅ **Already committed** - Data is locked for reporting")
 
 def render_settings():
     st.markdown("## ⚙️ Settings")
