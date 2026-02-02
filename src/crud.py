@@ -694,3 +694,94 @@ def list_commit_metrics(
         ORDER BY c.created_at DESC, c.id DESC;
     """
     return _q(sql, params)
+
+
+# ---------------- Data Cleanup ----------------
+def delete_client_data(
+    client_id: int,
+    delete_banks: bool = False,
+    delete_categories: bool = False,
+    delete_drafts: bool = False,
+    delete_committed: bool = False,
+    delete_vendor_memory: bool = False,
+    delete_keyword_model: bool = False,
+    delete_commits: bool = False,
+    delete_client_itself: bool = False,
+) -> dict:
+    """
+    Delete selected data for a client.
+    Returns dict with counts of deleted rows per table.
+    """
+    deleted_counts = {}
+    
+    try:
+        engine = get_engine()
+        with engine.begin() as conn:
+            # 1. Keyword Model
+            if delete_keyword_model:
+                result = conn.execute(
+                    text("DELETE FROM keyword_model WHERE client_id=:cid"),
+                    {"cid": client_id}
+                )
+                deleted_counts["keyword_model"] = result.rowcount
+            
+            # 2. Vendor Memory
+            if delete_vendor_memory:
+                result = conn.execute(
+                    text("DELETE FROM vendor_memory WHERE client_id=:cid"),
+                    {"cid": client_id}
+                )
+                deleted_counts["vendor_memory"] = result.rowcount
+            
+            # 3. Committed Transactions
+            if delete_committed:
+                result = conn.execute(
+                    text("DELETE FROM transactions_committed WHERE client_id=:cid"),
+                    {"cid": client_id}
+                )
+                deleted_counts["transactions_committed"] = result.rowcount
+            
+            # 4. Draft Transactions
+            if delete_drafts:
+                result = conn.execute(
+                    text("DELETE FROM transactions_draft WHERE client_id=:cid"),
+                    {"cid": client_id}
+                )
+                deleted_counts["transactions_draft"] = result.rowcount
+            
+            # 5. Commits
+            if delete_commits:
+                result = conn.execute(
+                    text("DELETE FROM commits WHERE client_id=:cid"),
+                    {"cid": client_id}
+                )
+                deleted_counts["commits"] = result.rowcount
+            
+            # 6. Categories
+            if delete_categories:
+                result = conn.execute(
+                    text("DELETE FROM categories WHERE client_id=:cid"),
+                    {"cid": client_id}
+                )
+                deleted_counts["categories"] = result.rowcount
+            
+            # 7. Banks
+            if delete_banks:
+                result = conn.execute(
+                    text("DELETE FROM banks WHERE client_id=:cid"),
+                    {"cid": client_id}
+                )
+                deleted_counts["banks"] = result.rowcount
+            
+            # 8. Client itself
+            if delete_client_itself:
+                result = conn.execute(
+                    text("DELETE FROM clients WHERE id=:cid"),
+                    {"cid": client_id}
+                )
+                deleted_counts["clients"] = result.rowcount
+            
+            return {"ok": True, "deleted": deleted_counts}
+    
+    except Exception as e:
+        return {"ok": False, "error": str(e)}
