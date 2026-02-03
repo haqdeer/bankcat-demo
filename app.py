@@ -1651,18 +1651,19 @@ def render_categorisation():
         st.session_state.date_from = dt.date(year, month_names.index(month) + 1, 1)
     if st.session_state.date_to is None:
         last_day = calendar.monthrange(year, month_names.index(month) + 1)[1]
-        st.session_state.date_to = dt.date(year, month_names.index(month) + 1, last_day)            
-            # Format dates
-            date_range_display = "—"
-            if item["min_date"] and item["max_date"]:
-                date_range_display = f"{item['min_date']} to {item['max_date']}"
-            
-            last_updated_display = "N/A"
-            if item["last_updated"] and item["last_updated"] != "N/A":
-                try:
-                    last_updated_display = str(item["last_updated"])[:10]
-                except:
-                    last_updated_display = str(item["last_updated"])
+        st.session_state.date_to = dt.date(year, month_names.index(month) + 1, last_day)
+    
+    # Format dates
+    date_range_display = "—"
+    if item["min_date"] and item["max_date"]:
+        date_range_display = f"{item['min_date']} to {item['max_date']}"
+    
+    last_updated_display = "N/A"
+    if item["last_updated"] and item["last_updated"] != "N/A":
+        try:
+            last_updated_display = str(item["last_updated"])[:10]
+        except:
+            last_updated_display = str(item["last_updated"])
             
             # Display item row
             row_cols = st.columns([2, 1.5, 1, 1, 1.5, 1, 1])
