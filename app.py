@@ -1604,7 +1604,7 @@ def render_categorisation():
         
         saved_items.append({
             "id": f"draft_{client_id}_{bank_id}_{period}",
-            "type": "Draft",
+            "type": type_label,  # ✅ CHANGED
             "status": status_label,
             "badge_class": badge_class,
             "row_count": int(draft_summary.get("row_count") or 0),
@@ -1634,8 +1634,8 @@ def render_categorisation():
         
         # Header
         header_cols = st.columns([2, 1.5, 1, 1, 1.5, 1, 1])
-        header_cols[0].markdown("**Status**")
-        header_cols[1].markdown("**Type**")
+        header_cols[0].markdown("**Type**")
+        header_cols[1].markdown("**Status**")
         header_cols[2].markdown("**Rows**")
         header_cols[3].markdown("**Suggested**")
         header_cols[4].markdown("**Finalised**")
@@ -1646,7 +1646,12 @@ def render_categorisation():
         
         for item in saved_items:
             is_selected = (selected_item_id == item["id"])
-            
+    # Initialize date_from/date_to if None
+    if st.session_state.date_from is None:
+        st.session_state.date_from = dt.date(year, month_names.index(month) + 1, 1)
+    if st.session_state.date_to is None:
+        last_day = calendar.monthrange(year, month_names.index(month) + 1)[1]
+        st.session_state.date_to = dt.date(year, month_names.index(month) + 1, last_day)            
             # Format dates
             date_range_display = "—"
             if item["min_date"] and item["max_date"]:
@@ -1830,7 +1835,9 @@ def render_categorisation():
         
         if selected_item_id.startswith("draft_"):
             # Draft selected
-            suggested_count = int(draft_summary.get("suggested_count") or 0)
+    suggested_count = 0
+    if draft_summary:
+        suggested_count = int(draft_summary.get("suggested_count") or 0)
             final_count = int(draft_summary.get("final_count") or 0)
             total_rows = int(draft_summary.get("row_count") or 0)
             
@@ -1864,36 +1871,51 @@ def render_categorisation():
             
             with action_cols[1]:
                 # Save Changes button (always shown when draft selected)
-                if st.button("💾 Save Draft Changes", type="primary", use_container_width=True):
+                if st.button("💾 Save Draft Changes", type="primary", use_container_width=True, key="save_draft_changes"):
                     # Check if we have edited data
-                    if "draft_editor" in st.session_state:
+                    if "draft_editor" in st.session_state and st.session_state.draft_editor:
                         # Get edited data
-                        edited_data = st.session_state.draft_editor["edited_rows"]
+                        edited_data = st.session_state.draft_editor.get("edited_rows", {})
+                        
                         if edited_data:
+                            st.info(f"Found {len(edited_data)} edited rows")
+                            
                             # Prepare rows for saving
                             rows_to_save = []
                             for row_idx, changes in edited_data.items():
                                 row_idx = int(row_idx)
                                 if row_idx < len(draft_rows):
                                     original_row = draft_rows[row_idx]
+                                    final_cat = changes.get("final_category")
+                                    final_ven = changes.get("final_vendor")
+                                    
+                                    # Use original values if new ones are empty
+                                    if final_cat is None or final_cat == "":
+                                        final_cat = original_row.get("final_category", "")
+                                    if final_ven is None or final_ven == "":
+                                        final_ven = original_row.get("final_vendor", "")
+                                    
                                     rows_to_save.append({
                                         "id": original_row["id"],
-                                        "final_category": changes.get("final_category", original_row.get("final_category", "")),
-                                        "final_vendor": changes.get("final_vendor", original_row.get("final_vendor", ""))
+                                        "final_category": final_cat,
+                                        "final_vendor": final_ven
                                     })
                             
-                            # Save changes
-                            try:
-                                updated = crud.save_review_changes(rows_to_save)
-                                st.success(f"✅ Saved {updated} changes")
-                                cache_data.clear()
-                                st.rerun()
-                            except Exception as e:
-                                st.error(f"❌ Save failed: {_format_exc(e)}")
+                            if rows_to_save:
+                                # Save changes
+                                try:
+                                    updated = crud.save_review_changes(rows_to_save)
+                                    st.success(f"✅ Saved {updated} changes")
+                                    cache_data.clear()
+                                    st.rerun()
+                                except Exception as e:
+                                    st.error(f"❌ Save failed: {_format_exc(e)}")
+                            else:
+                                st.warning("No valid changes to save")
                         else:
-                            st.info("No changes detected to save.")
+                            st.info("No changes detected to save. Make edits in the table first.")
                     else:
-                        st.info("Make changes in the table above first.")
+                        st.info("Make changes in the table above first, then save.")
             
             with action_cols[2]:
                 # Commit button (only if all rows finalised)
@@ -1905,27 +1927,42 @@ def render_categorisation():
                             committed_by = st.text_input("Committed by", key="commit_by")
                             confirm = st.checkbox("Confirm final commit", key="confirm_commit")
                             
-                            if st.button("Confirm Commit", type="primary"):
+                            if st.button("Confirm Commit", type="primary", key="final_commit_btn"):
                                 if confirm and committed_by:
                                     if not st.session_state.processing_commit:
                                         st.session_state.processing_commit = True
-                                        progress = show_progress_loader("Committing transactions...")
+                                        
+                                        # Show detailed debug info
+                                        st.info(f"Committing: Client={client_id}, Bank={bank_id}, Period={period}")
+                                        
                                         try:
                                             result = crud.commit_period(client_id, bank_id, period, 
                                                                       committed_by=committed_by)
-                                            progress.empty()
+                                            
                                             if result.get("ok"):
                                                 st.success(f"✅ Committed ({result.get('rows', 0)} rows)")
+                                                # Clear all relevant session states
+                                                st.session_state.categorisation_selected_item = None
+                                                st.session_state.standardized_rows = []
+                                                st.session_state.df_raw = None
                                                 cache_data.clear()
                                                 st.session_state.processing_commit = False
                                                 st.rerun()
                                             else:
                                                 st.error(f"❌ Commit failed: {result.get('msg', 'Unknown error')}")
+                                                # Show debug info
+                                                st.write("Debug info:", result)
                                                 st.session_state.processing_commit = False
                                         except Exception as e:
-                                            progress.empty()
-                                            st.error(f"❌ Commit failed: {_format_exc(e)}")
+                                            st.error(f"❌ Commit error: {_format_exc(e)}")
+                                            import traceback
+                                            st.code(traceback.format_exc())
                                             st.session_state.processing_commit = False
+                                else:
+                                    if not committed_by:
+                                        st.error("❌ Please enter 'Committed by' name")
+                                    if not confirm:
+                                        st.error("❌ Please confirm final commit")
                                 else:
                                     if not committed_by:
                                         st.warning("Please enter 'Committed by' name")
