@@ -483,81 +483,120 @@ def committed_sample(client_id: int, bank_id: int, period: str, limit: int = 200
 
 
 def commit_period(client_id: int, bank_id: int, period: str, committed_by: Optional[str] = None) -> dict:
+    """Commit draft to committed table with learning"""
+    
+    # ✅ ADD THIS DEBUG CODE AT START
+    print(f"🚨 COMMIT DEBUG START: client={client_id}, bank={bank_id}, period={period}")
+    print(f"🚨 Committed by: {committed_by}")
+    
     draft = load_draft(client_id, bank_id, period)
+    print(f"🚨 Loaded {len(draft)} draft rows")
+    
     if not draft:
+        print("🚨 ERROR: No draft rows found")
         return {"ok": False, "msg": "No draft rows found for this bank+period."}
-
+    
+    print(f"🚨 First draft row sample: {draft[0] if draft else 'None'}")
+    
     # Validation: must have final_category for every row
     missing = [r for r in draft if not (r.get("final_category") or "").strip()]
+    print(f"🚨 Rows missing final_category: {len(missing)}")
+    
     if missing:
+        print(f"🚨 ERROR: Missing final_category in rows")
         return {"ok": False, "msg": f"{len(missing)} rows missing Final Category. Please fill before Commit."}
-
+    
     total = len(draft)
     matched = 0
     for r in draft:
         if (r.get("final_category") or "").strip() == (r.get("suggested_category") or "").strip():
             matched += 1
+    
     accuracy = round(matched / total, 4) if total else None
-
+    print(f"🚨 Accuracy calculated: {accuracy} ({matched}/{total})")
+    
     # Deactivate any prior commits for the same client+bank+period
-    _exec("""
-        UPDATE commits
-        SET is_active=FALSE
-        WHERE client_id=:cid AND bank_id=:bid AND period=:p AND is_active=TRUE;
-    """, {"cid": client_id, "bid": bank_id, "p": period})
-
+    try:
+        _exec("""
+            UPDATE commits
+            SET is_active=FALSE
+            WHERE client_id=:cid AND bank_id=:bid AND period=:p AND is_active=TRUE;
+        """, {"cid": client_id, "bid": bank_id, "p": period})
+        print("🚨 Deactivated prior commits")
+    except Exception as e:
+        print(f"🚨 ERROR deactivating prior commits: {e}")
+    
     # Insert commit row
-    cm = _q("""
-        INSERT INTO commits(client_id, bank_id, period, committed_by, rows_committed, accuracy, is_active)
-        VALUES (:cid,:bid,:p,:by,:n,:acc,TRUE)
-        RETURNING id;
-    """, {"cid": client_id, "bid": bank_id, "p": period, "by": committed_by, "n": total, "acc": accuracy})
-    commit_id = int(cm[0]["id"])
-
+    try:
+        cm = _q("""
+            INSERT INTO commits(client_id, bank_id, period, committed_by, rows_committed, accuracy, is_active)
+            VALUES (:cid,:bid,:p,:by,:n,:acc,TRUE)
+            RETURNING id;
+        """, {"cid": client_id, "bid": bank_id, "p": period, "by": committed_by, "n": total, "acc": accuracy})
+        commit_id = int(cm[0]["id"])
+        print(f"🚨 Commit row inserted with ID: {commit_id}")
+    except Exception as e:
+        print(f"🚨 ERROR inserting commit row: {e}")
+        return {"ok": False, "msg": f"Database error creating commit record: {str(e)}"}
+    
     # Insert committed transactions + learning updates
-    for r in draft:
+    inserted_count = 0
+    for idx, r in enumerate(draft):
         cat = (r.get("final_category") or "").strip()
         ven = (r.get("final_vendor") or None)
         sc = (r.get("suggested_category") or None)
         sv = (r.get("suggested_vendor") or None)
         cf = r.get("confidence")
         rs = r.get("reason")
-
-        _exec("""
-            INSERT INTO transactions_committed(
-                commit_id, client_id, bank_id, period,
-                tx_date, description, debit, credit, balance,
-                category, vendor,
-                suggested_category, suggested_vendor, confidence, reason
-            )
-            VALUES (
-                :cm,:cid,:bid,:p,
-                :dt,:ds,:dr,:cr,:bal,
-                :cat,:ven,
-                :sc,:sv,:cf,:rs
-            );
-        """, {
-            "cm": commit_id, "cid": client_id, "bid": bank_id, "p": period,
-            "dt": r["tx_date"], "ds": r["description"],
-            "dr": r.get("debit", 0) or 0, "cr": r.get("credit", 0) or 0, "bal": r.get("balance", None),
-            "cat": cat, "ven": ven,
-            "sc": sc, "sv": sv, "cf": cf, "rs": rs
-        })
-
-        # Learn: vendor -> category if vendor exists
-        if ven:
-            _upsert_vendor_memory(client_id, ven, cat, delta_conf=0.02)
-
-        # Learn: tokens -> category
-        toks = _tokenize(r.get("description") or "")
-        # small capped learning
-        for t in set(toks[:10]):
-            _upsert_keyword_weight(client_id, t, cat, delta=0.10)
-
+        
+        try:
+            _exec("""
+                INSERT INTO transactions_committed(
+                    commit_id, client_id, bank_id, period,
+                    tx_date, description, debit, credit, balance,
+                    category, vendor,
+                    suggested_category, suggested_vendor, confidence, reason
+                )
+                VALUES (
+                    :cm,:cid,:bid,:p,
+                    :dt,:ds,:dr,:cr,:bal,
+                    :cat,:ven,
+                    :sc,:sv,:cf,:rs
+                );
+            """, {
+                "cm": commit_id, "cid": client_id, "bid": bank_id, "p": period,
+                "dt": r["tx_date"], "ds": r["description"],
+                "dr": r.get("debit", 0) or 0, "cr": r.get("credit", 0) or 0, "bal": r.get("balance", None),
+                "cat": cat, "ven": ven,
+                "sc": sc, "sv": sv, "cf": cf, "rs": rs
+            })
+            inserted_count += 1
+            
+            # Learn: vendor -> category if vendor exists
+            if ven:
+                _upsert_vendor_memory(client_id, ven, cat, delta_conf=0.02)
+            
+            # Learn: tokens -> category
+            toks = _tokenize(r.get("description") or "")
+            # small capped learning
+            for t in set(toks[:10]):
+                _upsert_keyword_weight(client_id, t, cat, delta=0.10)
+                
+        except Exception as e:
+            print(f"🚨 ERROR inserting transaction {idx}: {e}")
+    
+    print(f"🚨 Inserted {inserted_count} committed transactions")
+    
     # After commit: clear draft rows for that period (lock behavior)
-    delete_draft_period(client_id, bank_id, period)
-
-    return {"ok": True, "commit_id": commit_id, "rows": total, "accuracy": accuracy}
+    try:
+        delete_draft_period(client_id, bank_id, period)
+        print("🚨 Deleted draft rows")
+    except Exception as e:
+        print(f"🚨 ERROR deleting draft rows: {e}")
+    
+    print(f"🚨 COMMIT DEBUG END: Successfully committed {total} rows")
+    
+    return {"ok": True, "commit_id": commit_id, "rows": total, "accuracy": accuracy, "debug": f"Inserted {inserted_count} rows"}
 
 
 # ---------------- Committed Reporting ----------------
