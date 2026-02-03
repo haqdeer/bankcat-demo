@@ -1591,23 +1591,32 @@ def render_categorisation():
     if draft_summary:
         suggested_count = int(draft_summary.get("suggested_count") or 0)
         final_count = int(draft_summary.get("final_count") or 0)
+        total_rows = int(draft_summary.get("row_count") or 0)
+        
+        # Determine status and type
+        status_label = ""
+        type_label = ""
+        badge_class = ""
         
         if suggested_count == 0:
             status_label = "Draft Saved"
+            type_label = "Draft"
             badge_class = "status-draft"
-        elif final_count < int(draft_summary.get("row_count") or 0):
-            status_label = "Draft Categorised"
+        elif final_count < total_rows:
+            status_label = f"Categorised ({final_count}/{total_rows})"
+            type_label = "Draft Categorised"
             badge_class = "status-categorised"
         else:
-            status_label = "Draft Finalised"
+            status_label = "Ready to Commit"
+            type_label = "Draft Finalised"
             badge_class = "status-committed"
         
         saved_items.append({
             "id": f"draft_{client_id}_{bank_id}_{period}",
-            "type": type_label,  # ✅ CHANGED
+            "type": type_label,
             "status": status_label,
             "badge_class": badge_class,
-            "row_count": int(draft_summary.get("row_count") or 0),
+            "row_count": total_rows,
             "suggested_rows": suggested_count,
             "final_rows": final_count,
             "min_date": draft_summary.get("min_date"),
