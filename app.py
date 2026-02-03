@@ -1,4 +1,4 @@
-# app.py - COMPLETE FIXED VERSION WITH UI ENHANCEMENTS ONLY
+# app.py - COMPLETE FIXED VERSION WITH ALL BUG FIXES + UI IMPROVEMENTS
 import io
 import sys
 import calendar
@@ -78,8 +78,8 @@ REQUIRED_CRUD_APIS = (
     "list_committed_transactions",
     "list_committed_pl_summary",
     "list_commit_metrics",
-    "delete_client_data",  # ✅ NEW DATA CLEANUP FUNCTION
-    "ensure_ask_client_category",  # ✅ ADD THIS LINE - NEW FUNCTION
+    "delete_client_data",
+    "ensure_ask_client_category",
 )
 
 
@@ -124,7 +124,7 @@ def cached_banks(client_id: int):
 def cached_categories(client_id: int):
     try:
         # Ensure Ask Client category exists
-        crud.ensure_ask_client_category(client_id)  # ✅ ADD THIS LINE
+        crud.ensure_ask_client_category(client_id)
         return crud.list_categories(client_id, include_inactive=True)
     except Exception as e:
         st.error(f"Unable to load categories. {_format_exc(e)}")
@@ -216,6 +216,8 @@ def init_session_state():
         "processing_commit": st.session_state.get("processing_commit", False),
         "last_edited_row": st.session_state.get("last_edited_row", None),
         "last_edit_time": st.session_state.get("last_edit_time", 0),
+        # NEW: For file upload state
+        "file_uploaded": st.session_state.get("file_uploaded", False),
     }
     
     for key, default_value in defaults.items():
@@ -231,7 +233,7 @@ def init_session_state():
 init_session_state()
 
 # ---------------- Enhanced Loader System ----------------
-def show_loader_instant(duration=1.8, message="LOADING"):
+def show_loader_instant(duration=1.2, message="LOADING"):
     """Show instant loader that appears immediately"""
     loader_html = f"""
     <div id="bankcat-instant-loader" style="
@@ -330,21 +332,23 @@ def show_progress_loader(message="Processing..."):
     with progress_placeholder.container():
         st.markdown(f"""
         <div style="
-            background: rgba(255, 255, 255, 0.9);
-            padding: 20px;
-            border-radius: 10px;
-            box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+            background: rgba(255, 255, 255, 0.95);
+            padding: 25px 30px;
+            border-radius: 12px;
+            box-shadow: 0 6px 20px rgba(0,0,0,0.15);
             text-align: center;
             position: fixed;
             top: 50%;
             left: 50%;
             transform: translate(-50%, -50%);
             z-index: 1000;
+            border: 1px solid #e5e7eb;
+            min-width: 250px;
         ">
-            <div style="margin-bottom: 15px;">
+            <div style="margin-bottom: 20px;">
                 <div style="
-                    width: 50px;
-                    height: 50px;
+                    width: 60px;
+                    height: 60px;
                     margin: 0 auto;
                     border: 4px solid #f3f3f3;
                     border-top: 4px solid #7CFFB2;
@@ -352,7 +356,8 @@ def show_progress_loader(message="Processing..."):
                     animation: spin 1s linear infinite;
                 "></div>
             </div>
-            <div style="color: #4a5568; font-size: 14px; font-weight: 500;">{message}</div>
+            <div style="color: #4a5568; font-size: 15px; font-weight: 600; margin-bottom: 8px;">{message}</div>
+            <div style="color: #718096; font-size: 13px;">Please wait...</div>
         </div>
         <style>
         @keyframes spin {{
@@ -366,19 +371,30 @@ def show_progress_loader(message="Processing..."):
 # ---------------- App Startup Loader ----------------
 if not st.session_state.app_initialized:
     # Show instant loader
-    st.markdown(show_loader_instant(2.5, "LOADING BANKCAT"), unsafe_allow_html=True)
+    st.markdown(show_loader_instant(2.0, "LOADING BANKCAT"), unsafe_allow_html=True)
     
     # Mark as initialized
     st.session_state.app_initialized = True
     
     # Wait for loader duration and rerun
-    time.sleep(2.5)
+    time.sleep(2.0)
     st.rerun()
 
 # ---------------- Enhanced Custom CSS ----------------
 st.markdown(
     """
 <style>
+/* Main background */
+.stApp {
+    background-color: #f8fafc;
+}
+
+/* Sidebar styling */
+.css-1d391kg, section[data-testid="stSidebar"] {
+    background-color: #ffffff;
+    border-right: 1px solid #e5e7eb;
+}
+
 /* Sidebar logo styling - TIGHT ALIGNMENT */
 .sidebar-logo {
     text-align: center;
@@ -408,11 +424,16 @@ st.markdown(
 .page-title {
     margin-top: 0.75rem;
     margin-bottom: 1.5rem;
+    color: #1f2937;
+    font-weight: 700;
+    border-bottom: 2px solid #7CFFB2;
+    padding-bottom: 0.5rem;
 }
 
 /* Content spacing */
 .main .block-container {
     padding-top: 1rem !important;
+    padding-bottom: 2rem !important;
 }
 
 /* Categorisation specific styling */
@@ -422,11 +443,16 @@ st.markdown(
 
 .section-card {
     background: white;
-    border-radius: 8px;
-    padding: 1.5rem;
+    border-radius: 10px;
+    padding: 1.75rem;
     margin-bottom: 1.5rem;
-    box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+    box-shadow: 0 2px 8px rgba(0,0,0,0.06);
     border: 1px solid #e5e7eb;
+    transition: box-shadow 0.2s;
+}
+
+.section-card:hover {
+    box-shadow: 0 4px 12px rgba(0,0,0,0.08);
 }
 
 /* Saved items table styling */
@@ -442,51 +468,58 @@ st.markdown(
 }
 
 .saved-item-row.selected {
-    background-color: #e8f5e9;
-    border-left: 4px solid #4caf50;
+    background-color: #f0fdf4;
+    border-left: 4px solid #10b981;
+    border-radius: 4px;
 }
 
 /* Status badges */
 .status-badge {
-    padding: 0.25rem 0.75rem;
-    border-radius: 12px;
+    padding: 0.35rem 0.85rem;
+    border-radius: 20px;
     font-size: 0.75rem;
-    font-weight: 500;
+    font-weight: 600;
     display: inline-block;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
 }
 
 .status-draft {
-    background-color: #e3f2fd;
-    color: #1565c0;
+    background-color: #dbeafe;
+    color: #1d4ed8;
+    border: 1px solid #bfdbfe;
 }
 
 .status-categorised {
-    background-color: #fff3e0;
-    color: #ef6c00;
+    background-color: #fef3c7;
+    color: #d97706;
+    border: 1px solid #fde68a;
 }
 
 .status-committed {
-    background-color: #e8f5e9;
-    color: #2e7d32;
+    background-color: #dcfce7;
+    color: #047857;
+    border: 1px solid #bbf7d0;
 }
 
 /* Data cleanup warning */
 .cleanup-warning {
     background-color: #fff8e1;
-    border-left: 4px solid #ff9800;
+    border-left: 4px solid #f59e0b;
     padding: 1rem;
-    border-radius: 4px;
+    border-radius: 6px;
     margin: 1rem 0;
 }
 
 /* NEW: Row highlight animation */
 @keyframes highlightRow {
-    0% { background-color: rgba(124, 255, 178, 0.3); }
+    0% { background-color: rgba(124, 255, 178, 0.4); }
+    70% { background-color: rgba(124, 255, 178, 0.1); }
     100% { background-color: transparent; }
 }
 
 .highlight-row {
-    animation: highlightRow 1.5s ease-out;
+    animation: highlightRow 2s ease-out;
 }
 
 /* NEW: Processing overlay */
@@ -496,7 +529,7 @@ st.markdown(
     left: 0;
     width: 100%;
     height: 100%;
-    background: rgba(255, 255, 255, 0.8);
+    background: rgba(255, 255, 255, 0.9);
     display: flex;
     justify-content: center;
     align-items: center;
@@ -505,9 +538,10 @@ st.markdown(
 
 /* NEW: Ask Client special styling */
 .ask-client-category {
-    color: #ff9800 !important;
+    color: #f59e0b !important;
     font-weight: 600 !important;
     font-style: italic !important;
+    background-color: #fffbeb !important;
 }
 
 /* NEW: Fade in animation for content */
@@ -517,7 +551,87 @@ st.markdown(
 }
 
 .fade-in-content {
-    animation: fadeInContent 0.3s ease-out;
+    animation: fadeInContent 0.4s ease-out;
+}
+
+/* NEW: Button improvements */
+.stButton > button {
+    border-radius: 8px !important;
+    font-weight: 500 !important;
+    transition: all 0.2s !important;
+}
+
+.stButton > button:hover {
+    transform: translateY(-1px);
+    box-shadow: 0 4px 12px rgba(0,0,0,0.1) !important;
+}
+
+/* NEW: Select box improvements */
+.stSelectbox > div > div {
+    border-radius: 8px !important;
+}
+
+/* NEW: Metric card styling */
+.css-1r6slb0 {
+    background-color: white !important;
+    border-radius: 10px !important;
+    padding: 1.5rem !important;
+    border: 1px solid #e5e7eb !important;
+    box-shadow: 0 2px 6px rgba(0,0,0,0.04) !important;
+}
+
+/* NEW: Data editor improvements */
+.stDataFrame {
+    border-radius: 8px !important;
+    overflow: hidden !important;
+}
+
+/* NEW: Tab improvements */
+.stTabs [data-baseweb="tab-list"] {
+    gap: 8px !important;
+}
+
+.stTabs [data-baseweb="tab"] {
+    border-radius: 6px !important;
+    padding: 10px 20px !important;
+}
+
+/* NEW: Green active buttons in sidebar */
+.stButton > button[kind="secondary"] {
+    background-color: #10b981 !important;
+    color: white !important;
+    border-color: #10b981 !important;
+}
+
+.stButton > button[kind="secondary"]:hover {
+    background-color: #0da271 !important;
+    border-color: #0da271 !important;
+}
+
+/* NEW: Red warning buttons */
+.stButton > button[kind="primary"][style*="background-color: rgb(255, 75, 75)"] {
+    background-color: #ef4444 !important;
+    border-color: #ef4444 !important;
+}
+
+.stButton > button[kind="primary"][style*="background-color: rgb(255, 75, 75)"]:hover {
+    background-color: #dc2626 !important;
+    border-color: #dc2626 !important;
+}
+
+/* NEW: Date input improvements */
+.stDateInput > div > div {
+    border-radius: 8px !important;
+}
+
+/* NEW: File uploader improvements */
+.stFileUploader > div {
+    border-radius: 8px !important;
+    border: 2px dashed #d1d5db !important;
+}
+
+.stFileUploader > div:hover {
+    border-color: #7CFFB2 !important;
 }
 </style>
 """,
@@ -550,7 +664,7 @@ def handle_page_transition(new_page: str, subpage: str | None = None):
     """Handle page transitions with loader"""
     if st.session_state.active_page != new_page:
         # Show loader
-        st.markdown(show_loader_instant(1.2, "LOADING PAGE"), unsafe_allow_html=True)
+        st.markdown(show_loader_instant(1.0, "LOADING PAGE"), unsafe_allow_html=True)
         
         # Update page state
         st.session_state.active_page = new_page
@@ -567,9 +681,9 @@ def handle_page_transition(new_page: str, subpage: str | None = None):
 # Check if loader should be shown
 if st.session_state.page_transition_loader:
     elapsed = time.time() - st.session_state.loader_start_time
-    if elapsed < 1.2:
+    if elapsed < 1.0:
         # Still within loader duration
-        time.sleep(1.2 - elapsed)
+        time.sleep(1.0 - elapsed)
     
     # Clear loader state
     st.session_state.page_transition_loader = False
@@ -622,7 +736,6 @@ with st.sidebar:
         handle_page_transition("Companies", "List")
 
     # Setup - EXPANDABLE
-    # Setup - EXPANDABLE
     setup_chevron = "▾" if st.session_state.sidebar_setup_open else "▸"
     setup_active = st.session_state.active_page == "Setup"
     
@@ -659,7 +772,7 @@ with st.sidebar:
                 st.session_state.active_page = "Setup"
                 st.session_state.active_subpage = tab
                 st.rerun()
-                
+
     st.markdown("---")
     st.markdown("### 📤 Export")
     if st.button("Export Transactions", use_container_width=True):
@@ -1163,7 +1276,7 @@ def render_setup_banks():
                         edit_bank["id"],
                         bank_name,
                         masked,
-                        account_type,
+                        acct_type,
                         currency,
                         None if has_tx else opening,
                     )
@@ -1435,9 +1548,16 @@ def render_categorisation():
     with col4:
         month_idx = month_names.index(month) + 1
         last_day = calendar.monthrange(year, month_idx)[1]
+        
+        # Initialize dates if None
+        if st.session_state.date_from is None:
+            st.session_state.date_from = dt.date(year, month_idx, 1)
+        if st.session_state.date_to is None:
+            st.session_state.date_to = dt.date(year, month_idx, last_day)
+        
         default_range = (
-            st.session_state.date_from or dt.date(year, month_idx, 1),
-            st.session_state.date_to or dt.date(year, month_idx, last_day),
+            st.session_state.date_from,
+            st.session_state.date_to,
         )
         dr = st.date_input("Date Range", value=default_range, label_visibility="collapsed")
         date_from, date_to = dr if isinstance(dr, tuple) else (dr, dr)
@@ -1445,8 +1565,13 @@ def render_categorisation():
         st.session_state.date_to = date_to
 
     # --- Get data summaries ---
-    draft_summary = crud.get_draft_summary(client_id, bank_id, period)
-    commit_summary = crud.get_commit_summary(client_id, bank_id, period)
+    draft_summary = None
+    commit_summary = None
+    try:
+        draft_summary = crud.get_draft_summary(client_id, bank_id, period)
+        commit_summary = crud.get_commit_summary(client_id, bank_id, period)
+    except Exception as e:
+        st.error(f"Error loading summaries: {_format_exc(e)}")
 
     # --- Row 3: Upload & Mapping Section (ONLY SHOW IF NO DRAFT/COMMIT EXISTS) ---
     if not draft_summary and not commit_summary:
@@ -1477,6 +1602,7 @@ def render_categorisation():
                 try:
                     df_raw = pd.read_csv(up_stmt)
                     st.session_state.df_raw = df_raw
+                    st.session_state.file_uploaded = True
                     st.success(f"✅ Loaded {len(df_raw)} rows")
                 except Exception as e:
                     st.error(f"❌ Upload failed: {_format_exc(e)}")
@@ -1655,33 +1781,27 @@ def render_categorisation():
         
         for item in saved_items:
             is_selected = (selected_item_id == item["id"])
-    # Initialize date_from/date_to if None
-    if st.session_state.date_from is None:
-        st.session_state.date_from = dt.date(year, month_names.index(month) + 1, 1)
-    if st.session_state.date_to is None:
-        last_day = calendar.monthrange(year, month_names.index(month) + 1)[1]
-        st.session_state.date_to = dt.date(year, month_names.index(month) + 1, last_day)
-    
-    # Format dates
-    date_range_display = "—"
-    if item["min_date"] and item["max_date"]:
-        date_range_display = f"{item['min_date']} to {item['max_date']}"
-    
-    last_updated_display = "N/A"
-    if item["last_updated"] and item["last_updated"] != "N/A":
-        try:
-            last_updated_display = str(item["last_updated"])[:10]
-        except:
-            last_updated_display = str(item["last_updated"])
+            
+            # Format dates
+            date_range_display = "—"
+            if item.get("min_date") and item.get("max_date"):
+                date_range_display = f"{item['min_date']} to {item['max_date']}"
+            
+            last_updated_display = "N/A"
+            if item.get("last_updated") and item["last_updated"] != "N/A":
+                try:
+                    last_updated_display = str(item["last_updated"])[:10]
+                except:
+                    last_updated_display = str(item["last_updated"])
             
             # Display item row
             row_cols = st.columns([2, 1.5, 1, 1, 1.5, 1, 1])
             
             with row_cols[0]:
-                st.write(f"**{item['status']}**")
+                st.write(f"**{item['type']}**")
             
             with row_cols[1]:
-                st.markdown(f'<span class="status-badge {item["badge_class"]}">{item["type"]}</span>', unsafe_allow_html=True)
+                st.markdown(f'<span class="status-badge {item["badge_class"]}">{item["status"]}</span>', unsafe_allow_html=True)
             
             with row_cols[2]:
                 st.write(f"{item['row_count']}")
@@ -1739,14 +1859,11 @@ def render_categorisation():
                     
                     # Get category names - Ask Client will automatically be included
                     category_names = []
-                    category_styles = {}  # For styling Ask Client differently
                     
                     for c in categories:
                         if c.get("is_active", True):
                             cat_name = c.get("category_name", "")
                             category_names.append(cat_name)
-                            if cat_name.lower() == "ask client":
-                                category_styles[cat_name] = "ask-client-category"
                     
                     # Create editable dataframe with dropdowns
                     edited_df = st.data_editor(
@@ -1812,9 +1929,11 @@ def render_categorisation():
         st.markdown("### 6. Progress Summary")
         
         total_rows = int(draft_summary.get("row_count") or 0)
-        suggested_rows = int(draft_summary.get("suggested_count") or 0)
-        final_rows = int(draft_summary.get("final_count") or 0)
-        pending_rows = total_rows - final_rows
+        suggested_count = 0
+        if draft_summary:
+            suggested_count = int(draft_summary.get("suggested_count") or 0)
+        final_count = int(draft_summary.get("final_count") or 0)
+        pending_rows = total_rows - final_count
         
         col1, col2, col3, col4 = st.columns(4)
         
@@ -1822,19 +1941,19 @@ def render_categorisation():
             st.metric("Total Rows", total_rows)
         
         with col2:
-            suggested_pct = (suggested_rows / total_rows * 100) if total_rows > 0 else 0
-            st.metric("AI Suggested", suggested_rows, f"{suggested_pct:.1f}%")
+            suggested_pct = (suggested_count / total_rows * 100) if total_rows > 0 else 0
+            st.metric("AI Suggested", suggested_count, f"{suggested_pct:.1f}%")
         
         with col3:
-            final_pct = (final_rows / total_rows * 100) if total_rows > 0 else 0
-            st.metric("User Finalised", final_rows, f"{final_pct:.1f}%")
+            final_pct = (final_count / total_rows * 100) if total_rows > 0 else 0
+            st.metric("User Finalised", final_count, f"{final_pct:.1f}%")
         
         with col4:
             pending_pct = (pending_rows / total_rows * 100) if total_rows > 0 else 0
             delta_color = "inverse" if pending_rows > 0 else "normal"
             st.metric("Pending Review", pending_rows, f"{pending_pct:.1f}%", delta_color=delta_color)
     
-      # --- Row 7: Action Buttons (ONLY SHOW IF ITEM SELECTED) ---
+    # --- Row 7: Action Buttons (ONLY SHOW IF ITEM SELECTED) ---
     if has_selected_item:
         st.markdown("### 7. Actions")
         
@@ -1848,8 +1967,8 @@ def render_categorisation():
             suggested_count = 0
             if draft_summary:
                 suggested_count = int(draft_summary.get("suggested_count") or 0)
-                final_count = int(draft_summary.get("final_count") or 0)
-                total_rows = int(draft_summary.get("row_count") or 0)
+            final_count = int(draft_summary.get("final_count") or 0)
+            total_rows = int(draft_summary.get("row_count") or 0)
             
             # Create columns for buttons
             action_cols = st.columns([1, 1, 1])
@@ -1937,45 +2056,42 @@ def render_categorisation():
                             committed_by = st.text_input("Committed by", key="commit_by")
                             confirm = st.checkbox("Confirm final commit", key="confirm_commit")
                             
-                            col1, col2 = st.columns(2)
-                            with col1:
-                                if st.button("✅ Confirm Commit", type="primary", 
-                                           key="final_commit_btn", use_container_width=True):
-                                    if confirm and committed_by:
-                                        if not st.session_state.processing_commit:
-                                            st.session_state.processing_commit = True
-                                            progress = show_progress_loader("Committing transactions...")
+                            if st.button("Confirm Commit", type="primary", key="final_commit_btn"):
+                                if confirm and committed_by:
+                                    if not st.session_state.processing_commit:
+                                        st.session_state.processing_commit = True
+                                        
+                                        # Show detailed debug info
+                                        st.info(f"Committing: Client={client_id}, Bank={bank_id}, Period={period}")
+                                        
+                                        try:
+                                            result = crud.commit_period(client_id, bank_id, period, 
+                                                                      committed_by=committed_by)
                                             
-                                            try:
-                                                result = crud.commit_period(client_id, bank_id, period, 
-                                                                          committed_by=committed_by)
-                                                progress.empty()
-                                                
-                                                if result.get("ok"):
-                                                    st.success(f"✅ Committed ({result.get('rows', 0)} rows)")
-                                                    # Clear all relevant session states
-                                                    st.session_state.categorisation_selected_item = None
-                                                    st.session_state.standardized_rows = []
-                                                    st.session_state.df_raw = None
-                                                    cache_data.clear()
-                                                    st.session_state.processing_commit = False
-                                                    st.rerun()
-                                                else:
-                                                    st.error(f"❌ Commit failed: {result.get('msg', 'Unknown error')}")
-                                                    st.session_state.processing_commit = False
-                                            except Exception as e:
-                                                progress.empty()
-                                                st.error(f"❌ Commit error: {_format_exc(e)}")
+                                            if result.get("ok"):
+                                                st.success(f"✅ Committed ({result.get('rows', 0)} rows)")
+                                                # Clear all relevant session states
+                                                st.session_state.categorisation_selected_item = None
+                                                st.session_state.standardized_rows = []
+                                                st.session_state.df_raw = None
+                                                cache_data.clear()
                                                 st.session_state.processing_commit = False
-                                    else:
-                                        if not committed_by:
-                                            st.error("❌ Please enter 'Committed by' name")
-                                        if not confirm:
-                                            st.error("❌ Please confirm final commit")
-                            
-                            with col2:
-                                if st.button("❌ Cancel", key="cancel_commit", use_container_width=True):
-                                    st.rerun()
+                                                st.rerun()
+                                            else:
+                                                st.error(f"❌ Commit failed: {result.get('msg', 'Unknown error')}")
+                                                # Show debug info
+                                                st.write("Debug info:", result)
+                                                st.session_state.processing_commit = False
+                                        except Exception as e:
+                                            st.error(f"❌ Commit error: {_format_exc(e)}")
+                                            import traceback
+                                            st.code(traceback.format_exc())
+                                            st.session_state.processing_commit = False
+                                else:
+                                    if not committed_by:
+                                        st.error("❌ Please enter 'Committed by' name")
+                                    if not confirm:
+                                        st.error("❌ Please confirm final commit")
                 else:
                     pending = total_rows - final_count
                     st.info(f"📝 **Finalise {pending} more rows to commit**")
