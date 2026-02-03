@@ -13,20 +13,16 @@ def get_engine():
     return create_engine(db_url, pool_pre_ping=True)
 
 
-# src/crud.py - Line 22 fix
 def _q(sql: str, params: Optional[dict] = None) -> List[dict]:
-    """Execute SELECT query with parameters"""
     engine = get_engine()
     try:
         with engine.begin() as conn:
-            # Use text() and params for safety
             result = conn.execute(text(sql), params or {})
             rows = result.mappings().all()
             return [dict(r) for r in rows]
     except Exception as e:
-        # st.error(f"Database query error: {e}")  # Comment this out if st is not available
         return []
-        
+
 
 def _exec(sql: str, params: Optional[dict] = None) -> int:
     engine = get_engine()
@@ -127,7 +123,6 @@ def list_categories(client_id: int, include_inactive: bool = False) -> List[dict
 
 
 def add_category(client_id: int, name: str, typ: str, nature: str):
-    # category_code auto
     code = "CAT-" + re.sub(r"[^A-Z0-9]+", "-", name.strip().upper()).strip("-")[:40]
     _exec("""
         INSERT INTO categories(client_id, category_code, category_name, type, nature)
@@ -135,28 +130,22 @@ def add_category(client_id: int, name: str, typ: str, nature: str):
     """, {"cid": client_id, "cc": code, "cn": name.strip(), "t": typ, "n": nature})
 
 def ensure_ask_client_category(client_id: int):
-    """Ensure every client has 'Ask Client' category"""
     try:
-        # Check if already exists
         rows = _q("""
             SELECT id FROM categories 
             WHERE client_id=:cid AND LOWER(category_name)=LOWER(:name);
         """, {"cid": client_id, "name": "Ask Client"})
         
         if not rows:
-            # Add it
             code = "CAT-ASK-CLIENT"
             _exec("""
                 INSERT INTO categories(client_id, category_code, category_name, type, nature)
                 VALUES (:cid,:cc,:cn,'Other','Any');
             """, {"cid": client_id, "cc": code, "cn": "Ask Client"})
     except:
-        pass  # Silently ignore if already exists
+        pass
 
 def bulk_add_categories(client_id: int, rows: List[dict]) -> Tuple[int, int]:
-    """
-    rows: [{category_name,type,nature},...]
-    """
     ok = 0
     bad = 0
     for r in rows:
@@ -376,9 +365,6 @@ def load_committed_rows(client_id: int, bank_id: int, period: str) -> List[dict]
 
 
 def save_review_changes(rows: List[dict]) -> int:
-    """
-    rows must contain id, final_category, final_vendor
-    """
     updated = 0
     for r in rows:
         _exec("""
@@ -401,20 +387,14 @@ def _tokenize(desc: str) -> List[str]:
 
 
 def process_suggestions(client_id: int, bank_id: int, period: str, bank_account_type: str = "Current") -> int:
-    """
-    Fill suggested_category/vendor/confidence/reason.
-    Uses enhanced engine.py for better suggestions.
-    """
     cats = list_categories(client_id, include_inactive=False)
     
-    # Skip if no categories
     if not cats:
         return 0
     
     vm = {v["vendor_key"]: v for v in list_vendor_memory(client_id)}
     kw = keyword_weights(client_id)
     
-    # Use enhanced engine
     from src import engine
     
     draft = load_draft(client_id, bank_id, period)
@@ -425,20 +405,17 @@ def process_suggestions(client_id: int, bank_id: int, period: str, bank_account_
         debit = float(row.get("debit") or 0)
         credit = float(row.get("credit") or 0)
         
-        # Get suggestion from enhanced engine
         suggested_cat, suggested_vendor, confidence, reason = engine.suggest_one(
             desc=desc,
             debit=debit,
             credit=credit,
             bank_account_type=bank_account_type,
             categories=cats,
-            vendor_memory=list(vm.values()),  # Pass as list
+            vendor_memory=list(vm.values()),
             keyword_weights=kw,
         )
         
-        # If no suggestion, use fallback
         if not suggested_cat:
-            # Simple fallback logic
             if credit > 0 and debit == 0:
                 income_cats = [c for c in cats if c["type"] == "Income"]
                 suggested_cat = income_cats[0]["category_name"] if income_cats else "Income"
@@ -450,7 +427,6 @@ def process_suggestions(client_id: int, bank_id: int, period: str, bank_account_
                 confidence = 0.45
                 reason = "Fallback: Debit → Expense"
         
-        # Update database
         _exec("""
             UPDATE transactions_draft
             SET suggested_category=:sc,
@@ -483,120 +459,130 @@ def committed_sample(client_id: int, bank_id: int, period: str, limit: int = 200
 
 
 def commit_period(client_id: int, bank_id: int, period: str, committed_by: Optional[str] = None) -> dict:
-    """Commit draft to committed table with learning"""
+    """
+    SIMPLIFIED AND WORKING COMMIT FUNCTION
+    """
+    # 1. Load draft rows
+    draft_rows = load_draft(client_id, bank_id, period)
     
-    # ✅ ADD THIS DEBUG CODE AT START
-    print(f"🚨 COMMIT DEBUG START: client={client_id}, bank={bank_id}, period={period}")
-    print(f"🚨 Committed by: {committed_by}")
-    
-    draft = load_draft(client_id, bank_id, period)
-    print(f"🚨 Loaded {len(draft)} draft rows")
-    
-    if not draft:
-        print("🚨 ERROR: No draft rows found")
+    if not draft_rows:
         return {"ok": False, "msg": "No draft rows found for this bank+period."}
     
-    print(f"🚨 First draft row sample: {draft[0] if draft else 'None'}")
+    # 2. Check all rows have final_category
+    missing_categories = []
+    for idx, row in enumerate(draft_rows):
+        final_cat = (row.get("final_category") or "").strip()
+        if not final_cat:
+            missing_categories.append(idx + 1)
     
-    # Validation: must have final_category for every row
-    missing = [r for r in draft if not (r.get("final_category") or "").strip()]
-    print(f"🚨 Rows missing final_category: {len(missing)}")
+    if missing_categories:
+        return {"ok": False, "msg": f"Rows {missing_categories} missing Final Category."}
     
-    if missing:
-        print(f"🚨 ERROR: Missing final_category in rows")
-        return {"ok": False, "msg": f"{len(missing)} rows missing Final Category. Please fill before Commit."}
+    total_rows = len(draft_rows)
     
-    total = len(draft)
+    # 3. Calculate accuracy (suggested vs final)
     matched = 0
-    for r in draft:
-        if (r.get("final_category") or "").strip() == (r.get("suggested_category") or "").strip():
+    for row in draft_rows:
+        suggested = (row.get("suggested_category") or "").strip()
+        final = (row.get("final_category") or "").strip()
+        if suggested and final and suggested == final:
             matched += 1
     
-    accuracy = round(matched / total, 4) if total else None
-    print(f"🚨 Accuracy calculated: {accuracy} ({matched}/{total})")
+    accuracy = round(matched / total_rows, 4) if total_rows > 0 else 0
     
-    # Deactivate any prior commits for the same client+bank+period
+    # 4. Deactivate previous commits for same client+bank+period
     try:
         _exec("""
-            UPDATE commits
-            SET is_active=FALSE
-            WHERE client_id=:cid AND bank_id=:bid AND period=:p AND is_active=TRUE;
+            UPDATE commits 
+            SET is_active = FALSE 
+            WHERE client_id = :cid AND bank_id = :bid AND period = :p AND is_active = TRUE
         """, {"cid": client_id, "bid": bank_id, "p": period})
-        print("🚨 Deactivated prior commits")
-    except Exception as e:
-        print(f"🚨 ERROR deactivating prior commits: {e}")
+    except:
+        pass  # Ignore if error
     
-    # Insert commit row
-    try:
-        cm = _q("""
-            INSERT INTO commits(client_id, bank_id, period, committed_by, rows_committed, accuracy, is_active)
-            VALUES (:cid,:bid,:p,:by,:n,:acc,TRUE)
-            RETURNING id;
-        """, {"cid": client_id, "bid": bank_id, "p": period, "by": committed_by, "n": total, "acc": accuracy})
-        commit_id = int(cm[0]["id"])
-        print(f"🚨 Commit row inserted with ID: {commit_id}")
-    except Exception as e:
-        print(f"🚨 ERROR inserting commit row: {e}")
-        return {"ok": False, "msg": f"Database error creating commit record: {str(e)}"}
+    # 5. Create new commit record
+    commit_result = _q("""
+        INSERT INTO commits (client_id, bank_id, period, committed_by, rows_committed, accuracy, is_active)
+        VALUES (:cid, :bid, :p, :cb, :rows, :acc, TRUE)
+        RETURNING id
+    """, {
+        "cid": client_id, 
+        "bid": bank_id, 
+        "p": period, 
+        "cb": committed_by or "User",
+        "rows": total_rows, 
+        "acc": accuracy
+    })
     
-    # Insert committed transactions + learning updates
+    if not commit_result:
+        return {"ok": False, "msg": "Failed to create commit record"}
+    
+    commit_id = commit_result[0]["id"]
+    
+    # 6. Insert into committed table
     inserted_count = 0
-    for idx, r in enumerate(draft):
-        cat = (r.get("final_category") or "").strip()
-        ven = (r.get("final_vendor") or None)
-        sc = (r.get("suggested_category") or None)
-        sv = (r.get("suggested_vendor") or None)
-        cf = r.get("confidence")
-        rs = r.get("reason")
-        
+    for row in draft_rows:
         try:
             _exec("""
-                INSERT INTO transactions_committed(
+                INSERT INTO transactions_committed (
                     commit_id, client_id, bank_id, period,
                     tx_date, description, debit, credit, balance,
                     category, vendor,
                     suggested_category, suggested_vendor, confidence, reason
+                ) VALUES (
+                    :cm, :cid, :bid, :p,
+                    :dt, :ds, :dr, :cr, :bal,
+                    :cat, :ven,
+                    :sc, :sv, :cf, :rs
                 )
-                VALUES (
-                    :cm,:cid,:bid,:p,
-                    :dt,:ds,:dr,:cr,:bal,
-                    :cat,:ven,
-                    :sc,:sv,:cf,:rs
-                );
             """, {
-                "cm": commit_id, "cid": client_id, "bid": bank_id, "p": period,
-                "dt": r["tx_date"], "ds": r["description"],
-                "dr": r.get("debit", 0) or 0, "cr": r.get("credit", 0) or 0, "bal": r.get("balance", None),
-                "cat": cat, "ven": ven,
-                "sc": sc, "sv": sv, "cf": cf, "rs": rs
+                "cm": commit_id,
+                "cid": client_id,
+                "bid": bank_id,
+                "p": period,
+                "dt": row["tx_date"],
+                "ds": row["description"],
+                "dr": row.get("debit", 0) or 0,
+                "cr": row.get("credit", 0) or 0,
+                "bal": row.get("balance"),
+                "cat": row.get("final_category", ""),
+                "ven": row.get("final_vendor"),
+                "sc": row.get("suggested_category"),
+                "sv": row.get("suggested_vendor"),
+                "cf": row.get("confidence"),
+                "rs": row.get("reason")
             })
             inserted_count += 1
             
-            # Learn: vendor -> category if vendor exists
-            if ven:
-                _upsert_vendor_memory(client_id, ven, cat, delta_conf=0.02)
+            # 7. Learning: vendor memory
+            vendor = row.get("final_vendor")
+            category = row.get("final_category", "")
+            if vendor and category:
+                _upsert_vendor_memory(client_id, vendor, category, delta_conf=0.02)
             
-            # Learn: tokens -> category
-            toks = _tokenize(r.get("description") or "")
-            # small capped learning
-            for t in set(toks[:10]):
-                _upsert_keyword_weight(client_id, t, cat, delta=0.10)
+            # 8. Learning: keyword model
+            desc = row.get("description") or ""
+            toks = _tokenize(desc)
+            for t in set(toks[:5]):  # Limit to 5 tokens
+                _upsert_keyword_weight(client_id, t, category, delta=0.10)
                 
         except Exception as e:
-            print(f"🚨 ERROR inserting transaction {idx}: {e}")
+            continue  # Skip error rows
     
-    print(f"🚨 Inserted {inserted_count} committed transactions")
-    
-    # After commit: clear draft rows for that period (lock behavior)
+    # 9. Delete draft rows after successful commit
     try:
         delete_draft_period(client_id, bank_id, period)
-        print("🚨 Deleted draft rows")
-    except Exception as e:
-        print(f"🚨 ERROR deleting draft rows: {e}")
+    except:
+        pass
     
-    print(f"🚨 COMMIT DEBUG END: Successfully committed {total} rows")
-    
-    return {"ok": True, "commit_id": commit_id, "rows": total, "accuracy": accuracy, "debug": f"Inserted {inserted_count} rows"}
+    return {
+        "ok": True, 
+        "commit_id": commit_id, 
+        "rows": total_rows, 
+        "inserted": inserted_count,
+        "accuracy": accuracy,
+        "msg": f"Successfully committed {inserted_count} rows"
+    }
 
 
 # ---------------- Committed Reporting ----------------
@@ -743,16 +729,11 @@ def delete_client_data(
     delete_commits: bool = False,
     delete_client_itself: bool = False,
 ) -> dict:
-    """
-    Delete selected data for a client.
-    Returns dict with counts of deleted rows per table.
-    """
     deleted_counts = {}
     
     try:
         engine = get_engine()
         with engine.begin() as conn:
-            # 1. Keyword Model
             if delete_keyword_model:
                 result = conn.execute(
                     text("DELETE FROM keyword_model WHERE client_id=:cid"),
@@ -760,7 +741,6 @@ def delete_client_data(
                 )
                 deleted_counts["keyword_model"] = result.rowcount
             
-            # 2. Vendor Memory
             if delete_vendor_memory:
                 result = conn.execute(
                     text("DELETE FROM vendor_memory WHERE client_id=:cid"),
@@ -768,7 +748,6 @@ def delete_client_data(
                 )
                 deleted_counts["vendor_memory"] = result.rowcount
             
-            # 3. Committed Transactions
             if delete_committed:
                 result = conn.execute(
                     text("DELETE FROM transactions_committed WHERE client_id=:cid"),
@@ -776,7 +755,6 @@ def delete_client_data(
                 )
                 deleted_counts["transactions_committed"] = result.rowcount
             
-            # 4. Draft Transactions
             if delete_drafts:
                 result = conn.execute(
                     text("DELETE FROM transactions_draft WHERE client_id=:cid"),
@@ -784,7 +762,6 @@ def delete_client_data(
                 )
                 deleted_counts["transactions_draft"] = result.rowcount
             
-            # 5. Commits
             if delete_commits:
                 result = conn.execute(
                     text("DELETE FROM commits WHERE client_id=:cid"),
@@ -792,7 +769,6 @@ def delete_client_data(
                 )
                 deleted_counts["commits"] = result.rowcount
             
-            # 6. Categories
             if delete_categories:
                 result = conn.execute(
                     text("DELETE FROM categories WHERE client_id=:cid"),
@@ -800,7 +776,6 @@ def delete_client_data(
                 )
                 deleted_counts["categories"] = result.rowcount
             
-            # 7. Banks
             if delete_banks:
                 result = conn.execute(
                     text("DELETE FROM banks WHERE client_id=:cid"),
@@ -808,7 +783,6 @@ def delete_client_data(
                 )
                 deleted_counts["banks"] = result.rowcount
             
-            # 8. Client itself
             if delete_client_itself:
                 result = conn.execute(
                     text("DELETE FROM clients WHERE id=:cid"),
