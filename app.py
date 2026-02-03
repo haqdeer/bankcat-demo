@@ -1927,47 +1927,45 @@ def render_categorisation():
                             committed_by = st.text_input("Committed by", key="commit_by")
                             confirm = st.checkbox("Confirm final commit", key="confirm_commit")
                             
-                            if st.button("Confirm Commit", type="primary", key="final_commit_btn"):
-                                if confirm and committed_by:
-                                    if not st.session_state.processing_commit:
-                                        st.session_state.processing_commit = True
-                                        
-                                        # Show detailed debug info
-                                        st.info(f"Committing: Client={client_id}, Bank={bank_id}, Period={period}")
-                                        
-                                        try:
-                                            result = crud.commit_period(client_id, bank_id, period, 
-                                                                      committed_by=committed_by)
+                            col1, col2 = st.columns(2)
+                            with col1:
+                                if st.button("✅ Confirm Commit", type="primary", 
+                                           key="final_commit_btn", use_container_width=True):
+                                    if confirm and committed_by:
+                                        if not st.session_state.processing_commit:
+                                            st.session_state.processing_commit = True
+                                            progress = show_progress_loader("Committing transactions...")
                                             
-                                            if result.get("ok"):
-                                                st.success(f"✅ Committed ({result.get('rows', 0)} rows)")
-                                                # Clear all relevant session states
-                                                st.session_state.categorisation_selected_item = None
-                                                st.session_state.standardized_rows = []
-                                                st.session_state.df_raw = None
-                                                cache_data.clear()
+                                            try:
+                                                result = crud.commit_period(client_id, bank_id, period, 
+                                                                          committed_by=committed_by)
+                                                progress.empty()
+                                                
+                                                if result.get("ok"):
+                                                    st.success(f"✅ Committed ({result.get('rows', 0)} rows)")
+                                                    # Clear all relevant session states
+                                                    st.session_state.categorisation_selected_item = None
+                                                    st.session_state.standardized_rows = []
+                                                    st.session_state.df_raw = None
+                                                    cache_data.clear()
+                                                    st.session_state.processing_commit = False
+                                                    st.rerun()
+                                                else:
+                                                    st.error(f"❌ Commit failed: {result.get('msg', 'Unknown error')}")
+                                                    st.session_state.processing_commit = False
+                                            except Exception as e:
+                                                progress.empty()
+                                                st.error(f"❌ Commit error: {_format_exc(e)}")
                                                 st.session_state.processing_commit = False
-                                                st.rerun()
-                                            else:
-                                                st.error(f"❌ Commit failed: {result.get('msg', 'Unknown error')}")
-                                                # Show debug info
-                                                st.write("Debug info:", result)
-                                                st.session_state.processing_commit = False
-                                        except Exception as e:
-                                            st.error(f"❌ Commit error: {_format_exc(e)}")
-                                            import traceback
-                                            st.code(traceback.format_exc())
-                                            st.session_state.processing_commit = False
-                                else:
-                                    if not committed_by:
-                                        st.error("❌ Please enter 'Committed by' name")
-                                    if not confirm:
-                                        st.error("❌ Please confirm final commit")
-                                else:
-                                    if not committed_by:
-                                        st.warning("Please enter 'Committed by' name")
-                                    if not confirm:
-                                        st.warning("Please confirm final commit")
+                                    else:
+                                        if not committed_by:
+                                            st.error("❌ Please enter 'Committed by' name")
+                                        if not confirm:
+                                            st.error("❌ Please confirm final commit")
+                            
+                            with col2:
+                                if st.button("❌ Cancel", key="cancel_commit", use_container_width=True):
+                                    st.rerun()
                 else:
                     pending = total_rows - final_count
                     st.info(f"📝 **Finalise {pending} more rows to commit**")
