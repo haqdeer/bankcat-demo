@@ -1825,7 +1825,7 @@ def render_categorisation():
             delta_color = "inverse" if pending_rows > 0 else "normal"
             st.metric("Pending Review", pending_rows, f"{pending_pct:.1f}%", delta_color=delta_color)
     
-    # --- Row 7: Action Buttons (ONLY SHOW IF ITEM SELECTED) ---
+      # --- Row 7: Action Buttons (ONLY SHOW IF ITEM SELECTED) ---
     if has_selected_item:
         st.markdown("### 7. Actions")
         
@@ -1836,11 +1836,11 @@ def render_categorisation():
         
         if selected_item_id.startswith("draft_"):
             # Draft selected
-    suggested_count = 0
-    if draft_summary:
-        suggested_count = int(draft_summary.get("suggested_count") or 0)
-            final_count = int(draft_summary.get("final_count") or 0)
-            total_rows = int(draft_summary.get("row_count") or 0)
+            suggested_count = 0
+            if draft_summary:
+                suggested_count = int(draft_summary.get("suggested_count") or 0)
+                final_count = int(draft_summary.get("final_count") or 0)
+                total_rows = int(draft_summary.get("row_count") or 0)
             
             # Create columns for buttons
             action_cols = st.columns([1, 1, 1])
