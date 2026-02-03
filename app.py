@@ -1,4 +1,4 @@
-# app.py - COMPLETE FIXED VERSION WITH ALL BUG FIXES + UI IMPROVEMENTS
+# app.py - COMPLETE FIXED VERSION WITH ALL BUG FIXES + UI IMPROVEMENTS, Commit button + Loader UI
 import io
 import sys
 import calendar
@@ -123,7 +123,6 @@ def cached_banks(client_id: int):
 @st.cache_data(ttl=30)
 def cached_categories(client_id: int):
     try:
-        # Ensure Ask Client category exists
         crud.ensure_ask_client_category(client_id)
         return crud.list_categories(client_id, include_inactive=True)
     except Exception as e:
@@ -181,7 +180,6 @@ def _run_schema_check() -> dict[str, object]:
 
 # ---------------- Session State Initialization ----------------
 def init_session_state():
-    """Initialize all session state variables"""
     defaults = {
         "active_page": st.session_state.get("nav_page", "Home"),
         "active_subpage": None,
@@ -207,16 +205,13 @@ def init_session_state():
         "categorisation_selected_item": st.session_state.get("categorisation_selected_item"),
         "show_edit_form": st.session_state.get("show_edit_form", False),
         "edit_row_index": st.session_state.get("edit_row_index"),
-        # Loader states
         "app_initialized": st.session_state.get("app_initialized", False),
         "page_transition_loader": st.session_state.get("page_transition_loader", False),
         "loader_start_time": st.session_state.get("loader_start_time", 0),
-        # NEW: For loading states
         "processing_suggestions": st.session_state.get("processing_suggestions", False),
         "processing_commit": st.session_state.get("processing_commit", False),
         "last_edited_row": st.session_state.get("last_edited_row", None),
         "last_edit_time": st.session_state.get("last_edit_time", 0),
-        # NEW: For file upload state
         "file_uploaded": st.session_state.get("file_uploaded", False),
     }
     
@@ -232,102 +227,9 @@ def init_session_state():
 
 init_session_state()
 
-# ---------------- Enhanced Loader System ----------------
-def show_loader_instant(duration=1.2, message="LOADING"):
-    """Show instant loader that appears immediately"""
-    loader_html = f"""
-    <div id="bankcat-instant-loader" style="
-        position: fixed;
-        top: 0;
-        left: 0;
-        width: 100%;
-        height: 100vh;
-        background: white;
-        display: flex;
-        flex-direction: column;
-        justify-content: center;
-        align-items: center;
-        z-index: 99999;
-        animation: fadeIn 0.1s ease-in;
-    ">
-        <style>
-        @keyframes fadeIn {{
-            from {{ opacity: 0; }}
-            to {{ opacity: 1; }}
-        }}
-        
-        @keyframes smoothSpin {{
-            0% {{ transform: rotate(0deg); opacity: 0.8; }}
-            50% {{ transform: rotate(180deg); opacity: 1; filter: drop-shadow(0 0 20px rgba(124, 255, 178, 0.9)); }}
-            100% {{ transform: rotate(360deg); opacity: 0.8; }}
-        }}
-        
-        @keyframes fadeOut {{
-            from {{ opacity: 1; }}
-            to {{ opacity: 0; visibility: hidden; }}
-        }}
-        
-        .loader-core {{
-            animation: smoothSpin 1.5s cubic-bezier(0.68, -0.55, 0.27, 1.55) infinite;
-            width: 180px;
-            height: 180px;
-        }}
-        
-        .loader-text {{
-            margin-top: 25px;
-            color: #4a5568;
-            font-size: 16px;
-            font-weight: 500;
-            letter-spacing: 3px;
-            animation: smoothSpin 3s ease-in-out infinite;
-            opacity: 0.7;
-        }}
-        </style>
-    """
-    
-    # Add SVG or fallback
-    loader_svg_path = ROOT / "assets" / "bankcat-loader.gif.svg"
-    if loader_svg_path.exists():
-        svg_bytes = loader_svg_path.read_bytes()
-        svg_base64 = base64.b64encode(svg_bytes).decode('utf-8')
-        loader_html += f"""
-        <img src="data:image/svg+xml;base64,{svg_base64}" 
-             class="loader-core" 
-             alt="Loading..."/>
-        """
-    else:
-        loader_html += """
-        <div class="loader-core" style="
-            border: 12px solid #f3f3f3;
-            border-top: 12px solid #7CFFB2;
-            border-radius: 50%;
-        "></div>
-        """
-    
-    loader_html += f"""
-        <div class="loader-text">{message}</div>
-    </div>
-    
-    <script>
-    // Auto-remove after duration
-    setTimeout(function() {{
-        var loader = document.getElementById('bankcat-instant-loader');
-        if (loader) {{
-            loader.style.animation = 'fadeOut 0.3s forwards';
-            setTimeout(function() {{
-                if (loader.parentNode) {{
-                    loader.parentNode.removeChild(loader);
-                }}
-            }}, 300);
-        }}
-    }}, {int(duration * 1000)});
-    </script>
-    """
-    
-    return loader_html
-
-def show_progress_loader(message="Processing..."):
-    """Show progress bar loader"""
+# ---------------- SIMPLE LOADER SYSTEM ----------------
+def show_simple_loader(message="Processing..."):
+    """Simple progress bar loader"""
     progress_placeholder = st.empty()
     with progress_placeholder.container():
         st.markdown(f"""
@@ -368,16 +270,11 @@ def show_progress_loader(message="Processing..."):
         """, unsafe_allow_html=True)
     return progress_placeholder
 
-# ---------------- App Startup Loader ----------------
+# ---------------- App Startup ----------------
 if not st.session_state.app_initialized:
-    # Show instant loader
-    st.markdown(show_loader_instant(2.0, "LOADING BANKCAT"), unsafe_allow_html=True)
-    
-    # Mark as initialized
+    # Simple startup delay
+    time.sleep(0.5)
     st.session_state.app_initialized = True
-    
-    # Wait for loader duration and rerun
-    time.sleep(2.0)
     st.rerun()
 
 # ---------------- Enhanced Custom CSS ----------------
@@ -395,7 +292,7 @@ st.markdown(
     border-right: 1px solid #e5e7eb;
 }
 
-/* Sidebar logo styling - TIGHT ALIGNMENT */
+/* Sidebar logo styling */
 .sidebar-logo {
     text-align: center;
     padding-top: 0.5rem;
@@ -407,7 +304,7 @@ st.markdown(
     align-items: center;
 }
 
-/* Home page logo styling - MINIMAL SPACING */
+/* Home page logo styling */
 .home-logo-container {
     text-align: center;
     margin: 1rem auto;
@@ -522,20 +419,6 @@ st.markdown(
     animation: highlightRow 2s ease-out;
 }
 
-/* NEW: Processing overlay */
-.processing-overlay {
-    position: fixed;
-    top: 0;
-    left: 0;
-    width: 100%;
-    height: 100%;
-    background: rgba(255, 255, 255, 0.9);
-    display: flex;
-    justify-content: center;
-    align-items: center;
-    z-index: 9999;
-}
-
 /* NEW: Ask Client special styling */
 .ask-client-category {
     color: #f59e0b !important;
@@ -566,36 +449,6 @@ st.markdown(
     box-shadow: 0 4px 12px rgba(0,0,0,0.1) !important;
 }
 
-/* NEW: Select box improvements */
-.stSelectbox > div > div {
-    border-radius: 8px !important;
-}
-
-/* NEW: Metric card styling */
-.css-1r6slb0 {
-    background-color: white !important;
-    border-radius: 10px !important;
-    padding: 1.5rem !important;
-    border: 1px solid #e5e7eb !important;
-    box-shadow: 0 2px 6px rgba(0,0,0,0.04) !important;
-}
-
-/* NEW: Data editor improvements */
-.stDataFrame {
-    border-radius: 8px !important;
-    overflow: hidden !important;
-}
-
-/* NEW: Tab improvements */
-.stTabs [data-baseweb="tab-list"] {
-    gap: 8px !important;
-}
-
-.stTabs [data-baseweb="tab"] {
-    border-radius: 6px !important;
-    padding: 10px 20px !important;
-}
-
 /* NEW: Green active buttons in sidebar */
 .stButton > button[kind="secondary"] {
     background-color: #10b981 !important;
@@ -618,21 +471,6 @@ st.markdown(
     background-color: #dc2626 !important;
     border-color: #dc2626 !important;
 }
-
-/* NEW: Date input improvements */
-.stDateInput > div > div {
-    border-radius: 8px !important;
-}
-
-/* NEW: File uploader improvements */
-.stFileUploader > div {
-    border-radius: 8px !important;
-    border: 2px dashed #d1d5db !important;
-}
-
-.stFileUploader > div:hover {
-    border-color: #7CFFB2 !important;
-}
 </style>
 """,
     unsafe_allow_html=True,
@@ -649,49 +487,25 @@ elif active_page == "Setup" and active_subpage:
 
 logo_path = ROOT / "assets" / "bankcat-logo.jpeg"
 
-# فقط ہوم پیج پر لوگو دکھائیں
+# صرف ہوم پیج پر لوگو دکھائیں
 if active_page == "Home" and logo_path.exists():
     st.markdown('<div class="home-logo-container fade-in-content">', unsafe_allow_html=True)
     st.image(str(logo_path), width=520)
     st.markdown('</div>', unsafe_allow_html=True)
-    # ہوم پیج پر الگ سے ٹائٹل نہیں دکھائیں گے
 else:
-    # دیگر صفحات پر صرف ٹائٹل دکھائیں گے
     st.markdown(f'<h1 class="page-title fade-in-content">{page_title}</h1>', unsafe_allow_html=True)
 
 # ---------------- Page Transition Handler ----------------
 def handle_page_transition(new_page: str, subpage: str | None = None):
-    """Handle page transitions with loader"""
     if st.session_state.active_page != new_page:
-        # Show loader
-        st.markdown(show_loader_instant(1.0, "LOADING PAGE"), unsafe_allow_html=True)
-        
-        # Update page state
         st.session_state.active_page = new_page
         if subpage:
             st.session_state.active_subpage = subpage
-        
-        # Set loader start time
-        st.session_state.page_transition_loader = True
-        st.session_state.loader_start_time = time.time()
-        
-        # Force rerun
         st.rerun()
-
-# Check if loader should be shown
-if st.session_state.page_transition_loader:
-    elapsed = time.time() - st.session_state.loader_start_time
-    if elapsed < 1.0:
-        # Still within loader duration
-        time.sleep(1.0 - elapsed)
-    
-    # Clear loader state
-    st.session_state.page_transition_loader = False
-    st.session_state.loader_start_time = 0
 
 # ---------------- Sidebar Content ----------------
 with st.sidebar:
-    # Add logo to sidebar top (سینٹر میں)
+    # Add logo to sidebar top
     if logo_path.exists():
         st.markdown('<div class="sidebar-logo">', unsafe_allow_html=True)
         st.image(str(logo_path), width=220)
@@ -718,7 +532,6 @@ with st.sidebar:
             key=f"nav_{page}",
             type=_button_type(is_active),
         ):
-            # Collapse Setup if clicking another page
             if page != "Setup":
                 st.session_state.sidebar_setup_open = False
             handle_page_transition(page)
@@ -731,7 +544,6 @@ with st.sidebar:
         key="nav_companies",
         type=_button_type(companies_active),
     ):
-        # Collapse Setup if clicking Companies
         st.session_state.sidebar_setup_open = False
         handle_page_transition("Companies", "List")
 
@@ -745,12 +557,9 @@ with st.sidebar:
         key="toggle_setup",
         type=_button_type(setup_active),
     ):
-        # Toggle expand/collapse
         st.session_state.sidebar_setup_open = not st.session_state.sidebar_setup_open
         
-        # If we're opening Setup for first time, go to Setup page but DON'T auto-select subpage
         if st.session_state.sidebar_setup_open and not setup_active:
-            # Go to Setup page but keep subpage as None (user will select)
             handle_page_transition("Setup", None)
         else:
             st.rerun()
@@ -768,7 +577,6 @@ with st.sidebar:
                 key=f"setup_tab_{tab}",
                 type=_button_type(tab_active),
             ):
-                # Set both page and subpage
                 st.session_state.active_page = "Setup"
                 st.session_state.active_subpage = tab
                 st.rerun()
@@ -813,29 +621,6 @@ def _select_active_client(clients: list[dict]) -> int | None:
     st.session_state.active_client_id = client_id
     st.session_state.active_client_name = client_pick.split("|")[1].strip()
     return client_id
-
-
-def _select_bank(banks_active: list[dict]) -> tuple[int, dict]:
-    bank_options = []
-    for b in banks_active:
-        bank_options.append(f"{b['id']} | {b['bank_name']} ({b['account_type']})")
-    
-    selected_index = 0
-    if st.session_state.bank_id:
-        for i, opt in enumerate(bank_options):
-            if opt.startswith(f"{st.session_state.bank_id} |"):
-                selected_index = i
-                break
-    bank_pick = st.selectbox(
-        "Select Bank (for statement upload)",
-        bank_options,
-        index=selected_index,
-        key="bank_select",
-    )
-    bank_id = int(bank_pick.split("|")[0].strip())
-    st.session_state.bank_id = bank_id
-    bank_obj = [b for b in banks_active if int(b["id"]) == bank_id][0]
-    return bank_id, bank_obj
 
 
 # ---------------- Page Render Functions ----------------
@@ -1150,7 +935,6 @@ def render_companies_add():
         else:
             try:
                 cid = crud.create_client(name, industry, country, desc)
-                # ✅ Ensure Ask Client category exists for new client
                 crud.ensure_ask_client_category(cid)
                 st.success(f"Created client id={cid}")
                 cache_data.clear()
@@ -1167,7 +951,6 @@ def render_companies_add():
 
 
 def render_companies():
-    """Main companies page router"""
     subpage = st.session_state.active_subpage
     
     if subpage == "List":
@@ -1479,7 +1262,6 @@ def render_setup_categories():
 
 
 def render_setup():
-    """Setup page with Banks and Categories based on subpage"""
     if st.session_state.active_subpage == "Banks":
         render_setup_banks()
     else:
@@ -1549,7 +1331,6 @@ def render_categorisation():
         month_idx = month_names.index(month) + 1
         last_day = calendar.monthrange(year, month_idx)[1]
         
-        # Initialize dates if None
         if st.session_state.date_from is None:
             st.session_state.date_from = dt.date(year, month_idx, 1)
         if st.session_state.date_to is None:
@@ -1573,14 +1354,13 @@ def render_categorisation():
     except Exception as e:
         st.error(f"Error loading summaries: {_format_exc(e)}")
 
-    # --- Row 3: Upload & Mapping Section (ONLY SHOW IF NO DRAFT/COMMIT EXISTS) ---
+    # --- Row 3: Upload & Mapping Section ---
     if not draft_summary and not commit_summary:
         st.markdown("### 3. Upload Statement")
         
         col1, col2 = st.columns([1, 2])
         
         with col1:
-            # Download template
             stmt_template = pd.DataFrame([
                 {"Date": "2025-10-01", "Description": "POS Purchase Example", "Dr": 100.00, "Cr": 0.00, "Closing": ""}
             ])
@@ -1595,7 +1375,6 @@ def render_categorisation():
             )
         
         with col2:
-            # Upload CSV
             up_stmt = st.file_uploader("Upload CSV statement", type=["csv"], key="stmt_csv", label_visibility="collapsed")
             
             if up_stmt is not None:
@@ -1609,7 +1388,7 @@ def render_categorisation():
             else:
                 df_raw = st.session_state.df_raw
 
-        # --- Column Mapping (if file uploaded) ---
+        # Column Mapping
         if df_raw is not None and len(df_raw) > 0:
             st.markdown("#### Column Mapping")
             
@@ -1627,24 +1406,21 @@ def render_categorisation():
             with map_cols[4]:
                 map_bal = st.selectbox("Closing Balance", cols, index=cols.index("Closing") if "Closing" in cols else 0)
             
-            # Improved date parsing function
             def _to_date(x):
                 if pd.isna(x):
                     return None
                 try:
                     if isinstance(x, str):
                         x_str = str(x).strip()
-                        # Try multiple date formats
                         for fmt in ["%Y-%m-%d", "%d/%m/%Y", "%m/%d/%Y", "%d-%m-%Y", "%Y/%m/%d", "%d %b %Y", "%d %B %Y"]:
                             try:
                                 return dt.datetime.strptime(x_str, fmt).date()
                             except:
                                 continue
-                        # Try just extracting date parts
                         if "/" in x_str:
                             parts = x_str.split("/")
                             if len(parts) == 3:
-                                if len(parts[2]) == 4:  # Has year
+                                if len(parts[2]) == 4:
                                     return dt.date(int(parts[2]), int(parts[1]), int(parts[0]))
                     return pd.to_datetime(x, dayfirst=True).date()
                 except Exception:
@@ -1657,21 +1433,17 @@ def render_categorisation():
                 dropped_missing_desc = 0
                 
                 for idx, r in df_raw.iterrows():
-                    # Parse date
                     d = _to_date(r[map_date]) if map_date != "(blank)" else None
                     ds = str(r[map_desc]).strip() if map_desc != "(blank)" else ""
                     
-                    # If date missing, use period start date
                     if not d and ds:
                         d = dt.date(year, month_names.index(month) + 1, 1)
                         dropped_missing_date += 1
                     
-                    # Drop if description missing
                     if not ds:
                         dropped_missing_desc += 1
                         continue
                     
-                    # Parse amounts
                     drv = pd.to_numeric(r[map_dr], errors="coerce") if map_dr != "(blank)" else 0
                     crv = pd.to_numeric(r[map_cr], errors="coerce") if map_cr != "(blank)" else 0
                     bal = pd.to_numeric(r[map_bal], errors="coerce") if map_bal != "(blank)" else None
@@ -1693,7 +1465,6 @@ def render_categorisation():
                     "balance": map_bal
                 }
                 
-                # Show detailed statistics
                 st.success(f"✅ Mapped {len(standardized_rows)} rows")
                 st.info(f"""
                 **Mapping Summary:**
@@ -1703,23 +1474,19 @@ def render_categorisation():
                 - Rows dropped (missing description): {dropped_missing_desc}
                 """)
                 
-                # Clear any selected item
                 st.session_state.categorisation_selected_item = None
                 st.rerun()
 
     # --- Row 4: Saved Items Display ---
     st.markdown("### 4. Saved Items")
     
-    # Build items list - SINGLE ROW PER DRAFT
     saved_items = []
     
-    # Draft (either saved or categorised)
     if draft_summary:
         suggested_count = int(draft_summary.get("suggested_count") or 0)
         final_count = int(draft_summary.get("final_count") or 0)
         total_rows = int(draft_summary.get("row_count") or 0)
         
-        # Determine status and type
         status_label = ""
         type_label = ""
         badge_class = ""
@@ -1750,7 +1517,6 @@ def render_categorisation():
             "last_updated": draft_summary.get("last_saved") or "N/A",
         })
     
-    # Committed
     if commit_summary:
         saved_items.append({
             "id": f"committed_{commit_summary.get('commit_id')}",
@@ -1763,11 +1529,10 @@ def render_categorisation():
             "last_updated": commit_summary.get("committed_at") or "N/A",
         })
     
-    # Display saved items with SELECT/DESELECT buttons
+    # Display saved items
     if saved_items:
         selected_item_id = st.session_state.categorisation_selected_item
         
-        # Header
         header_cols = st.columns([2, 1.5, 1, 1, 1.5, 1, 1])
         header_cols[0].markdown("**Type**")
         header_cols[1].markdown("**Status**")
@@ -1782,7 +1547,6 @@ def render_categorisation():
         for item in saved_items:
             is_selected = (selected_item_id == item["id"])
             
-            # Format dates
             date_range_display = "—"
             if item.get("min_date") and item.get("max_date"):
                 date_range_display = f"{item['min_date']} to {item['max_date']}"
@@ -1794,7 +1558,6 @@ def render_categorisation():
                 except:
                     last_updated_display = str(item["last_updated"])
             
-            # Display item row
             row_cols = st.columns([2, 1.5, 1, 1, 1.5, 1, 1])
             
             with row_cols[0]:
@@ -1823,13 +1586,11 @@ def render_categorisation():
             
             with row_cols[6]:
                 if is_selected:
-                    if st.button("✖ Deselect", key=f"deselect_{item['id']}", type="secondary", 
-                               help="Remove from main view"):
+                    if st.button("✖ Deselect", key=f"deselect_{item['id']}", type="secondary"):
                         st.session_state.categorisation_selected_item = None
                         st.rerun()
                 else:
-                    if st.button("👉 Select", key=f"select_{item['id']}", type="primary",
-                               help="Load this item in main view"):
+                    if st.button("👉 Select", key=f"select_{item['id']}", type="primary"):
                         st.session_state.categorisation_selected_item = item["id"]
                         st.rerun()
             
@@ -1842,22 +1603,17 @@ def render_categorisation():
     selected_item_id = st.session_state.categorisation_selected_item
     has_selected_item = bool(selected_item_id)
     
-    # --- Row 5: Main View Table (ONLY SHOW IF ITEM SELECTED) ---
+    # --- Row 5: Main View Table ---
     if has_selected_item:
         st.markdown("### 5. Main View")
         
-        # Show uploaded/mapped rows if no item selected but mapped data exists
         if selected_item_id and selected_item_id.startswith("draft_"):
-            # Load draft rows
             try:
                 draft_rows = crud.load_draft_rows(client_id, bank_id, period)
                 if draft_rows:
                     df_d = pd.DataFrame(draft_rows)
                     
-                    # Load categories for dropdown - INCLUDING ASK CLIENT
                     categories = cached_categories(client_id)
-                    
-                    # Get category names - Ask Client will automatically be included
                     category_names = []
                     
                     for c in categories:
@@ -1865,7 +1621,6 @@ def render_categorisation():
                             cat_name = c.get("category_name", "")
                             category_names.append(cat_name)
                     
-                    # Create editable dataframe with dropdowns
                     edited_df = st.data_editor(
                         df_d,
                         column_config={
@@ -1898,11 +1653,9 @@ def render_categorisation():
                         key="draft_editor"
                     )
                     
-                    # Check for edits and highlight edited rows
                     if "draft_editor" in st.session_state:
                         edited_data = st.session_state.draft_editor.get("edited_rows", {})
                         if edited_data:
-                            # Track last edited row for highlighting
                             for row_idx in edited_data.keys():
                                 st.session_state.last_edited_row = int(row_idx)
                                 st.session_state.last_edit_time = time.time()
@@ -1913,7 +1666,6 @@ def render_categorisation():
                 st.error(f"Unable to load draft rows: {_format_exc(e)}")
         
         elif selected_item_id and selected_item_id.startswith("committed"):
-            # Load committed rows
             try:
                 committed_rows = crud.load_committed_rows(client_id, bank_id, period)
                 if committed_rows:
@@ -1924,7 +1676,7 @@ def render_categorisation():
             except Exception as e:
                 st.error(f"Unable to load committed rows: {_format_exc(e)}")
     
-    # --- Row 6: Progress Summary (ONLY SHOW IF ITEM SELECTED AND DRAFT EXISTS) ---
+    # --- Row 6: Progress Summary ---
     if has_selected_item and draft_summary and selected_item_id.startswith("draft_"):
         st.markdown("### 6. Progress Summary")
         
@@ -1953,34 +1705,29 @@ def render_categorisation():
             delta_color = "inverse" if pending_rows > 0 else "normal"
             st.metric("Pending Review", pending_rows, f"{pending_pct:.1f}%", delta_color=delta_color)
     
-    # --- Row 7: Action Buttons (ONLY SHOW IF ITEM SELECTED) ---
+    # --- Row 7: Action Buttons (FIXED COMMIT SECTION) ---
     if has_selected_item:
         st.markdown("### 7. Actions")
         
-        # Determine current state
-        has_mapped_data = bool(st.session_state.standardized_rows) and len(st.session_state.standardized_rows) > 0
         has_draft = bool(draft_summary)
         has_commit = bool(commit_summary)
         
         if selected_item_id.startswith("draft_"):
-            # Draft selected
             suggested_count = 0
             if draft_summary:
                 suggested_count = int(draft_summary.get("suggested_count") or 0)
             final_count = int(draft_summary.get("final_count") or 0)
             total_rows = int(draft_summary.get("row_count") or 0)
             
-            # Create columns for buttons
             action_cols = st.columns([1, 1, 1])
             
             with action_cols[0]:
-                # Suggest Categories button (only if not suggested yet)
                 if suggested_count == 0:
                     if st.button("🤖 Suggest Categories", type="primary", use_container_width=True, 
                                disabled=st.session_state.processing_suggestions):
                         if not st.session_state.processing_suggestions:
                             st.session_state.processing_suggestions = True
-                            progress = show_progress_loader("Generating AI Suggestions...")
+                            progress = show_simple_loader("Generating AI Suggestions...")
                             try:
                                 n = crud.process_suggestions(client_id, bank_id, period, 
                                                             bank_account_type=bank_obj.get("account_type"))
@@ -1999,17 +1746,13 @@ def render_categorisation():
                         st.info("Already suggested. Edit categories in the table above.")
             
             with action_cols[1]:
-                # Save Changes button (always shown when draft selected)
                 if st.button("💾 Save Draft Changes", type="primary", use_container_width=True, key="save_draft_changes"):
-                    # Check if we have edited data
                     if "draft_editor" in st.session_state and st.session_state.draft_editor:
-                        # Get edited data
                         edited_data = st.session_state.draft_editor.get("edited_rows", {})
                         
                         if edited_data:
                             st.info(f"Found {len(edited_data)} edited rows")
                             
-                            # Prepare rows for saving
                             rows_to_save = []
                             for row_idx, changes in edited_data.items():
                                 row_idx = int(row_idx)
@@ -2018,7 +1761,6 @@ def render_categorisation():
                                     final_cat = changes.get("final_category")
                                     final_ven = changes.get("final_vendor")
                                     
-                                    # Use original values if new ones are empty
                                     if final_cat is None or final_cat == "":
                                         final_cat = original_row.get("final_category", "")
                                     if final_ven is None or final_ven == "":
@@ -2031,7 +1773,6 @@ def render_categorisation():
                                     })
                             
                             if rows_to_save:
-                                # Save changes
                                 try:
                                     updated = crud.save_review_changes(rows_to_save)
                                     st.success(f"✅ Saved {updated} changes")
@@ -2047,89 +1788,56 @@ def render_categorisation():
                         st.info("Make changes in the table above first, then save.")
             
             with action_cols[2]:
-                # Commit button (only if all rows finalised)
                 if final_count >= total_rows and total_rows > 0:
+                    # SIMPLE COMMIT BUTTON - NO CONFIRMATION DIALOG
                     if st.button("🔒 Commit Final", type="primary", use_container_width=True,
                                disabled=st.session_state.processing_commit, key="commit_final_main"):
                         
-                        # Show confirmation dialog
-                        st.markdown("---")
-                        st.markdown("#### 🔒 Confirm Commit")
-                        
+                        # Ask for name
                         committed_by = st.text_input("Your Name (who is committing):", 
                                                    key="commit_by_simple", 
                                                    placeholder="Enter your name")
                         
-                        col1, col2 = st.columns(2)
-                        
-                        with col1:
-                            if st.button("✅ Yes, Commit Now", type="primary", key="confirm_yes"):
-                                if committed_by and committed_by.strip():
-                                    if not st.session_state.processing_commit:
-                                        st.session_state.processing_commit = True
-                                        progress = show_progress_loader("Committing transactions...")
-                                        
-                                        try:
-                                            result = crud.commit_period(client_id, bank_id, period, 
-                                                                      committed_by=committed_by.strip())
-                                            progress.empty()
-                                            
-                                            if result.get("ok"):
-                                                st.success(f"✅ Successfully committed {result.get('rows', 0)} rows!")
-                                                st.balloons()
-                                                
-                                                # Clear states and refresh
-                                                st.session_state.categorisation_selected_item = None
-                                                st.session_state.standardized_rows = []
-                                                st.session_state.df_raw = None
-                                                st.session_state.processing_commit = False
-                                                cache_data.clear()
-                                                time.sleep(1)
-                                                st.rerun()
-                                            else:
-                                                st.error(f"❌ Commit failed: {result.get('msg', 'Unknown error')}")
-                                                if "debug" in result:
-                                                    st.write("Debug:", result["debug"])
-                                                st.session_state.processing_commit = False
-                                        except Exception as e:
-                                            progress.empty()
-                                            st.error(f"❌ Commit error: {_format_exc(e)}")
-                                            import traceback
-                                            st.code(traceback.format_exc())
-                                            st.session_state.processing_commit = False
-                                else:
-                                    st.error("❌ Please enter your name before committing")
-                        
-                        with col2:
-                            if st.button("❌ Cancel", key="confirm_no"):
-                                st.info("Commit cancelled")
-                                st.rerun()
-                        
-                        # Debug info
-                        with st.expander("Debug Info (for troubleshooting)"):
-                            st.write(f"Client ID: {client_id}")
-                            st.write(f"Bank ID: {bank_id}")
-                            st.write(f"Period: {period}")
-                            st.write(f"Total Rows: {total_rows}")
-                            st.write(f"Finalised Rows: {final_count}")
-                            
-                            # Test commit function
-                            if st.button("Test Commit Function", key="test_commit"):
+                        if committed_by and committed_by.strip():
+                            if not st.session_state.processing_commit:
+                                st.session_state.processing_commit = True
+                                progress = show_simple_loader("Committing transactions...")
+                                
                                 try:
-                                    test_result = crud.commit_period(client_id, bank_id, period, 
-                                                                   committed_by="Test User")
-                                    st.write("Test result:", test_result)
+                                    result = crud.commit_period(client_id, bank_id, period, 
+                                                              committed_by=committed_by.strip())
+                                    progress.empty()
+                                    
+                                    if result.get("ok"):
+                                        st.success(f"✅ Successfully committed {result.get('rows', 0)} rows!")
+                                        st.balloons()
+                                        
+                                        # Clear states and refresh
+                                        st.session_state.categorisation_selected_item = None
+                                        st.session_state.standardized_rows = []
+                                        st.session_state.df_raw = None
+                                        st.session_state.processing_commit = False
+                                        cache_data.clear()
+                                        time.sleep(1)
+                                        st.rerun()
+                                    else:
+                                        st.error(f"❌ Commit failed: {result.get('msg', 'Unknown error')}")
+                                        st.session_state.processing_commit = False
                                 except Exception as e:
-                                    st.error(f"Test failed: {_format_exc(e)}")
+                                    progress.empty()
+                                    st.error(f"❌ Commit error: {_format_exc(e)}")
+                                    import traceback
+                                    st.code(traceback.format_exc())
+                                    st.session_state.processing_commit = False
+                        else:
+                            st.error("❌ Please enter your name before committing")
                 else:
                     pending = total_rows - final_count
                     st.info(f"📝 **Finalise {pending} more rows to commit**")
         
         elif selected_item_id.startswith("committed"):
-            # Committed item selected
             st.success("✅ **Committed & Locked** - This data is now available in Reports")
             
-            # Show commit info
             commit_info = crud.list_commit_metrics(
                 client_id=client_id,
                 bank_id=bank_id,
@@ -2150,7 +1858,6 @@ def render_categorisation():
     
     # --- Show special message for upload state ---
     elif not has_selected_item and not draft_summary and not commit_summary:
-        # Show uploaded/mapped data if exists
         if st.session_state.standardized_rows and len(st.session_state.standardized_rows) > 0:
             st.markdown("### 5. Mapped Data Preview")
             df_uploaded = pd.DataFrame(st.session_state.standardized_rows)
@@ -2163,7 +1870,6 @@ def render_categorisation():
                     n = crud.insert_draft_rows(client_id, bank_id, period, 
                                               st.session_state.standardized_rows, replace=True)
                     st.success(f"✅ Draft saved ({n} rows)")
-                    # Clear uploaded data after save
                     st.session_state.standardized_rows = []
                     st.session_state.df_raw = None
                     cache_data.clear()
@@ -2221,7 +1927,6 @@ def render_settings():
         st.warning("No clients found for cleanup.")
         return
     
-    # Client selection
     client_options = ["(Select Client)"] + [f"{c['id']} | {c['name']}" for c in clients]
     selected_client = st.selectbox("Select Client", client_options, key="cleanup_client_select")
     
@@ -2231,9 +1936,6 @@ def render_settings():
         
         st.markdown(f"**Selected:** {client_name} (ID: {client_id})")
         st.markdown("---")
-        
-        # Data type checkboxes
-        st.markdown("#### Select Data to Delete:")
         
         col1, col2 = st.columns(2)
         with col1:
@@ -2248,7 +1950,6 @@ def render_settings():
             delete_commits = st.checkbox("Commits History", value=False, key="cleanup_commits")
             delete_client_itself = st.checkbox("Client Itself", value=False, key="cleanup_client")
         
-        # Warning message
         any_selected = (delete_banks or delete_categories or delete_drafts or 
                        delete_committed or delete_vendor_memory or 
                        delete_keyword_model or delete_commits or delete_client_itself)
@@ -2258,7 +1959,6 @@ def render_settings():
             st.warning("⚠️ **WARNING:** This action cannot be undone. Data will be permanently deleted.")
             st.markdown('</div>', unsafe_allow_html=True)
             
-            # Confirmation
             confirm_delete = st.checkbox("I understand this action is irreversible", value=False, key="confirm_delete")
             
             if confirm_delete:
@@ -2283,7 +1983,6 @@ def render_settings():
                             for table, count in result["deleted"].items():
                                 st.write(f"- {table}: {count} rows")
                         
-                        # Clear cache and refresh
                         cache_data.clear()
                         st.rerun()
                     else:
@@ -2296,7 +1995,6 @@ def render_settings():
 def main():
     page = st.session_state.active_page
     
-    # Apply fade-in effect for content
     st.markdown('<div class="fade-in-content">', unsafe_allow_html=True)
     
     if page == "Home":
@@ -2323,7 +2021,6 @@ def main():
         time.time() - st.session_state.last_edit_time < 1.5):
         st.markdown(f"""
         <script>
-        // Highlight the recently edited row
         setTimeout(function() {{
             var rows = document.querySelectorAll('[data-testid="stDataFrame"] tbody tr');
             if (rows.length > {st.session_state.last_edited_row}) {{
