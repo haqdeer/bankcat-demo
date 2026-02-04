@@ -1789,51 +1789,48 @@ def render_categorisation():
             
             with action_cols[2]:
                 if final_count >= total_rows and total_rows > 0:
-                    # SIMPLE COMMIT BUTTON - SEPARATE NAME INPUT
+                    # SIMPLE COMMIT BUTTON - FIXED VERSION
                     st.markdown("**Commit Final**")
                     
-                    # Name input ALWAYS visible (not inside button)
-                    committed_by = st.text_input(
-                        "Your Name:", 
-                        value="Accountant",
-                        key="commit_by_name",
-                        help="Enter your name for audit trail"
-                    )
+                    # Show commit info
+                    st.info(f"✅ Ready to commit {total_rows} rows")
                     
-                    # Commit button
+                    # Simple commit button (no name required)
                     if st.button("🔒 Commit Final Now", type="primary", use_container_width=True,
                                disabled=st.session_state.processing_commit, key="commit_final_button"):
                         
-                        if not committed_by or not committed_by.strip():
-                            st.error("❌ Please enter your name before committing")
-                            st.stop()
-                        
                         if not st.session_state.processing_commit:
                             st.session_state.processing_commit = True
-                            progress = show_simple_loader("Committing transactions...")
+                            
+                            # Show immediate feedback
+                            status_placeholder = st.empty()
+                            status_placeholder.info("🔄 Starting commit process...")
                             
                             try:
+                                # Try to commit with default name
                                 result = crud.commit_period(client_id, bank_id, period, 
-                                                          committed_by=committed_by.strip())
-                                progress.empty()
+                                                          committed_by="Accountant")
+                                
+                                status_placeholder.empty()
                                 
                                 if result.get("ok"):
                                     st.success(f"✅ Successfully committed {result.get('rows', 0)} rows!")
-                                    st.balloons()
                                     
-                                    # Clear states and refresh
+                                    # Clear states immediately
                                     st.session_state.categorisation_selected_item = None
                                     st.session_state.standardized_rows = []
                                     st.session_state.df_raw = None
                                     st.session_state.processing_commit = False
                                     cache_data.clear()
-                                    time.sleep(1)
+                                    
+                                    # Force immediate rerun
                                     st.rerun()
                                 else:
                                     st.error(f"❌ Commit failed: {result.get('msg', 'Unknown error')}")
                                     st.session_state.processing_commit = False
+                                    
                             except Exception as e:
-                                progress.empty()
+                                status_placeholder.empty()
                                 st.error(f"❌ Commit error: {_format_exc(e)}")
                                 st.session_state.processing_commit = False
                 else:
