@@ -1,4 +1,4 @@
-# app.py - COMPLETE FIXED VERSION WITH ALL BUG FIXES + UI IMPROVEMENTS, Commit button + Loader UI
+# app.py - COMPLETE FIXED VERSION WITH ALL IMPROVEMENTS
 import io
 import sys
 import calendar
@@ -7,6 +7,7 @@ import urllib.parse
 import base64
 from pathlib import Path
 import time
+import random
 
 import pandas as pd
 import streamlit as st
@@ -213,6 +214,9 @@ def init_session_state():
         "last_edited_row": st.session_state.get("last_edited_row", None),
         "last_edit_time": st.session_state.get("last_edit_time", 0),
         "file_uploaded": st.session_state.get("file_uploaded", False),
+        "ai_suggestions_animating": st.session_state.get("ai_suggestions_animating", False),
+        "ai_current_row": st.session_state.get("ai_current_row", 0),
+        "cat_animation_stage": st.session_state.get("cat_animation_stage", 0),
     }
     
     for key, default_value in defaults.items():
@@ -227,7 +231,145 @@ def init_session_state():
 
 init_session_state()
 
-# ---------------- SIMPLE LOADER SYSTEM ----------------
+# ---------------- NEW: CAT ANIMATIONS ----------------
+def show_cat_thinking_animation(message="Cat is thinking..."):
+    """Show cat thinking animation"""
+    cat_faces = ["😺", "😸", "😹", "😻", "😼", "😽", "🙀", "😿", "😾"]
+    current_cat = random.choice(cat_faces)
+    
+    animation_html = f"""
+    <div style="
+        text-align: center;
+        padding: 25px;
+        background: #f0fdf4;
+        border-radius: 12px;
+        border: 2px solid #bbf7d0;
+        margin: 15px 0;
+    ">
+        <div style="font-size: 48px; margin-bottom: 15px; animation: bounce 1s infinite;">
+            {current_cat}
+        </div>
+        <div style="color: #065f46; font-weight: 600; font-size: 16px; margin-bottom: 8px;">
+            {message}
+        </div>
+        <div style="color: #047857; font-size: 13px;">
+            "Meow! Processing your request..."
+        </div>
+    </div>
+    <style>
+    @keyframes bounce {{
+        0%, 100% {{ transform: translateY(0); }}
+        50% {{ transform: translateY(-8px); }}
+    }}
+    </style>
+    """
+    return animation_html
+
+def show_cat_success_animation(message="Success!"):
+    """Show cat success animation"""
+    success_html = f"""
+    <div style="
+        text-align: center;
+        padding: 25px;
+        background: #dcfce7;
+        border-radius: 12px;
+        border: 2px solid #86efac;
+        margin: 15px 0;
+    ">
+        <div style="font-size: 48px; margin-bottom: 15px; animation: celebrate 0.8s;">
+            🎉😻
+        </div>
+        <div style="color: #065f46; font-weight: 600; font-size: 16px; margin-bottom: 8px;">
+            {message}
+        </div>
+        <div style="color: #047857; font-size: 13px;">
+            "Purrrrfect! All done!"
+        </div>
+    </div>
+    <style>
+    @keyframes celebrate {{
+        0% {{ transform: scale(0.8); opacity: 0; }}
+        50% {{ transform: scale(1.1); }}
+        100% {{ transform: scale(1); opacity: 1; }}
+    }}
+    </style>
+    """
+    return success_html
+
+def show_cat_processing_row(row_num, total_rows, category, vendor):
+    """Show cat processing individual row animation"""
+    cat_actions = [
+        "🔍 Sniffing transaction...",
+        "🧠 Analyzing pattern...",
+        "🏷️ Finding category...",
+        "🏢 Identifying vendor...",
+        "✅ Almost there..."
+    ]
+    
+    if row_num <= total_rows:
+        action_idx = min(row_num % len(cat_actions), len(cat_actions)-1)
+        action = cat_actions[action_idx]
+    else:
+        action = "Finishing up..."
+    
+    progress_pct = (row_num / total_rows * 100) if total_rows > 0 else 0
+    
+    animation_html = f"""
+    <div style="
+        background: white;
+        border-radius: 10px;
+        padding: 20px;
+        margin: 10px 0;
+        border: 1px solid #e5e7eb;
+        box-shadow: 0 2px 8px rgba(0,0,0,0.06);
+    ">
+        <div style="display: flex; align-items: center; margin-bottom: 15px;">
+            <div style="font-size: 32px; margin-right: 15px;">😼</div>
+            <div style="flex-grow: 1;">
+                <div style="color: #1f2937; font-weight: 600; font-size: 14px;">{action}</div>
+                <div style="color: #6b7280; font-size: 12px;">Row {row_num} of {total_rows}</div>
+            </div>
+            <div style="font-size: 24px;">→</div>
+            <div style="text-align: right; margin-left: 15px;">
+                <div style="color: #10b981; font-weight: 600; font-size: 14px;">{category}</div>
+                <div style="color: #6b7280; font-size: 12px;">{vendor}</div>
+            </div>
+        </div>
+        
+        <div style="width: 100%; height: 8px; background: #f3f4f6; border-radius: 4px; overflow: hidden;">
+            <div style="width: {progress_pct}%; height: 100%; background: linear-gradient(90deg, #7CFFB2, #10b981); 
+                    border-radius: 4px; transition: width 0.3s;"></div>
+        </div>
+        
+        <div style="display: flex; justify-content: space-between; margin-top: 8px; font-size: 11px; color: #6b7280;">
+            <div>🐾 Cat is working...</div>
+            <div>{progress_pct:.1f}%</div>
+        </div>
+    </div>
+    """
+    return animation_html
+
+def show_row_loading_cell():
+    """Show loading animation for individual table cell"""
+    return """
+    <div style="
+        display: inline-block;
+        width: 20px;
+        height: 20px;
+        border: 2px solid #f3f4f6;
+        border-top: 2px solid #7CFFB2;
+        border-radius: 50%;
+        animation: spin 0.8s linear infinite;
+    "></div>
+    <style>
+    @keyframes spin {
+        0% { transform: rotate(0deg); }
+        100% { transform: rotate(360deg); }
+    }
+    </style>
+    """
+
+# ---------------- Simple Loader ----------------
 def show_simple_loader(message="Processing..."):
     """Simple progress bar loader"""
     progress_placeholder = st.empty()
@@ -252,7 +394,7 @@ def show_simple_loader(message="Processing..."):
                     width: 60px;
                     height: 60px;
                     margin: 0 auto;
-                    border: 4px solid #f3f3f3;
+                    border: 4px solid #f3f4f6;
                     border-top: 4px solid #7CFFB2;
                     border-radius: 50%;
                     animation: spin 1s linear infinite;
@@ -272,7 +414,6 @@ def show_simple_loader(message="Processing..."):
 
 # ---------------- App Startup ----------------
 if not st.session_state.app_initialized:
-    # Simple startup delay
     time.sleep(0.5)
     st.session_state.app_initialized = True
     st.rerun()
@@ -408,7 +549,7 @@ st.markdown(
     margin: 1rem 0;
 }
 
-/* NEW: Row highlight animation */
+/* Row highlight animation */
 @keyframes highlightRow {
     0% { background-color: rgba(124, 255, 178, 0.4); }
     70% { background-color: rgba(124, 255, 178, 0.1); }
@@ -419,25 +560,29 @@ st.markdown(
     animation: highlightRow 2s ease-out;
 }
 
-/* NEW: Ask Client special styling */
-.ask-client-category {
-    color: #f59e0b !important;
-    font-weight: 600 !important;
-    font-style: italic !important;
-    background-color: #fffbeb !important;
+/* NEW: Cat animation styles */
+.cat-cell-loading {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    padding: 4px 8px;
+    background: #f0fdf4;
+    border-radius: 6px;
+    border: 1px solid #bbf7d0;
 }
 
-/* NEW: Fade in animation for content */
-@keyframes fadeInContent {
-    from { opacity: 0; transform: translateY(10px); }
-    to { opacity: 1; transform: translateY(0); }
+.cat-cell-success {
+    background: #dcfce7 !important;
+    border: 1px solid #86efac !important;
+    animation: popIn 0.3s ease-out;
 }
 
-.fade-in-content {
-    animation: fadeInContent 0.4s ease-out;
+@keyframes popIn {
+    0% { transform: scale(0.9); opacity: 0; }
+    100% { transform: scale(1); opacity: 1; }
 }
 
-/* NEW: Button improvements */
+/* Button improvements */
 .stButton > button {
     border-radius: 8px !important;
     font-weight: 500 !important;
@@ -449,7 +594,7 @@ st.markdown(
     box-shadow: 0 4px 12px rgba(0,0,0,0.1) !important;
 }
 
-/* NEW: Green active buttons in sidebar */
+/* Green active buttons in sidebar */
 .stButton > button[kind="secondary"] {
     background-color: #10b981 !important;
     color: white !important;
@@ -459,17 +604,6 @@ st.markdown(
 .stButton > button[kind="secondary"]:hover {
     background-color: #0da271 !important;
     border-color: #0da271 !important;
-}
-
-/* NEW: Red warning buttons */
-.stButton > button[kind="primary"][style*="background-color: rgb(255, 75, 75)"] {
-    background-color: #ef4444 !important;
-    border-color: #ef4444 !important;
-}
-
-.stButton > button[kind="primary"][style*="background-color: rgb(255, 75, 75)"]:hover {
-    background-color: #dc2626 !important;
-    border-color: #dc2626 !important;
 }
 </style>
 """,
@@ -487,7 +621,6 @@ elif active_page == "Setup" and active_subpage:
 
 logo_path = ROOT / "assets" / "bankcat-logo.jpeg"
 
-# صرف ہوم پیج پر لوگو دکھائیں
 if active_page == "Home" and logo_path.exists():
     st.markdown('<div class="home-logo-container fade-in-content">', unsafe_allow_html=True)
     st.image(str(logo_path), width=520)
@@ -505,7 +638,6 @@ def handle_page_transition(new_page: str, subpage: str | None = None):
 
 # ---------------- Sidebar Content ----------------
 with st.sidebar:
-    # Add logo to sidebar top
     if logo_path.exists():
         st.markdown('<div class="sidebar-logo">', unsafe_allow_html=True)
         st.image(str(logo_path), width=220)
@@ -536,7 +668,6 @@ with st.sidebar:
                 st.session_state.sidebar_setup_open = False
             handle_page_transition(page)
 
-    # Companies - SIMPLE BUTTON
     companies_active = st.session_state.active_page == "Companies"
     if st.button(
         "🏢 Companies",
@@ -547,7 +678,6 @@ with st.sidebar:
         st.session_state.sidebar_setup_open = False
         handle_page_transition("Companies", "List")
 
-    # Setup - EXPANDABLE
     setup_chevron = "▾" if st.session_state.sidebar_setup_open else "▸"
     setup_active = st.session_state.active_page == "Setup"
     
@@ -564,7 +694,6 @@ with st.sidebar:
         else:
             st.rerun()
     
-    # Setup tabs ONLY show when expanded
     if st.session_state.sidebar_setup_open:
         for tab in ["Banks", "Categories"]:
             tab_active = (
@@ -589,7 +718,6 @@ with st.sidebar:
         else:
             st.warning("Select a company first")
 
-
 # ---------------- Helper Functions ----------------
 def _require_active_client() -> int | None:
     client_id = st.session_state.active_client_id
@@ -597,7 +725,6 @@ def _require_active_client() -> int | None:
         st.warning("Select a company on Home first.")
         return None
     return client_id
-
 
 def _select_active_client(clients: list[dict]) -> int | None:
     options = ["(none)"] + [f"{c['id']} | {c['name']}" for c in clients]
@@ -622,7 +749,6 @@ def _select_active_client(clients: list[dict]) -> int | None:
     st.session_state.active_client_name = client_pick.split("|")[1].strip()
     return client_id
 
-
 # ---------------- Page Render Functions ----------------
 def render_home():
     clients = cached_clients()
@@ -632,7 +758,6 @@ def render_home():
     st.write("Welcome to the BankCat demo workspace.")
     st.caption("Shortcuts and quick links will be added later.")
 
-
 def render_dashboard():
     st.markdown("## 📊 Financial Dashboard")
     
@@ -640,14 +765,12 @@ def render_dashboard():
     if not client_id:
         return
     
-    # Date range selector
     col1, col2 = st.columns(2)
     with col1:
         start_date = st.date_input("Start Date", dt.date.today() - dt.timedelta(days=90))
     with col2:
         end_date = st.date_input("End Date", dt.date.today())
     
-    # Get transaction data
     try:
         transactions = crud.list_committed_transactions(
             client_id, 
@@ -658,7 +781,6 @@ def render_dashboard():
         if transactions:
             df = pd.DataFrame(transactions)
             
-            # 1. Income vs Expense summary
             st.subheader("💰 Income vs Expense")
             
             df['debit'] = pd.to_numeric(df['debit'], errors='coerce').fillna(0)
@@ -674,7 +796,6 @@ def render_dashboard():
             col3.metric("Net", f"${net:,.2f}", 
                        delta_color="normal" if net >= 0 else "inverse")
             
-            # 2. Monthly trend
             st.subheader("📈 Monthly Trend")
             df['month'] = pd.to_datetime(df['tx_date']).dt.strftime('%Y-%m')
             monthly = df.groupby('month').agg({
@@ -687,7 +808,6 @@ def render_dashboard():
             else:
                 st.info("No monthly data available")
                 
-            # 3. Top categories
             st.subheader("🏷️ Top Expense Categories")
             expenses = df[df['debit'] > 0]
             if not expenses.empty:
@@ -719,7 +839,6 @@ def render_dashboard():
             
     except Exception as e:
         st.error(f"Unable to load dashboard data: {_format_exc(e)}")
-
 
 def render_reports():
     st.markdown("## 📊 Reports")
@@ -763,7 +882,7 @@ def render_reports():
 
     if date_filter_from > date_filter_to:
         st.error("From Date must be before To Date.")
-        date_filter_from, date_filter_to = date_filter_to, date_filter_from
+        st.stop()
 
     st.subheader("Committed Transactions")
     try:
@@ -852,7 +971,6 @@ def render_reports():
     except Exception as e:
         st.error(f"Unable to load commit metrics. {_format_exc(e)}")
 
-
 def render_companies_list():
     client_id = st.session_state.active_client_id
     clients = cached_clients()
@@ -919,7 +1037,6 @@ def render_companies_list():
             st.session_state.edit_client_id = None
             st.rerun()
 
-
 def render_companies_add():
     st.markdown("## 🏢 Companies > Add Company")
     
@@ -949,7 +1066,6 @@ def render_companies_add():
         st.session_state.active_subpage = "List"
         st.rerun()
 
-
 def render_companies():
     subpage = st.session_state.active_subpage
     
@@ -960,7 +1076,6 @@ def render_companies():
     else:
         st.session_state.active_subpage = "List"
         st.rerun()
-
 
 def render_setup_banks():
     st.markdown("## 🛠️ Setup > Banks")
@@ -1094,7 +1209,6 @@ def render_setup_banks():
                 st.session_state.setup_banks_mode = "edit"
                 st.session_state.setup_bank_edit_id = bank["id"]
                 st.rerun()
-
 
 def render_setup_categories():
     st.markdown("## 🛠️ Setup > Categories")
@@ -1260,13 +1374,11 @@ def render_setup_categories():
                 st.session_state.setup_category_edit_id = cat["id"]
                 st.rerun()
 
-
 def render_setup():
     if st.session_state.active_subpage == "Banks":
         render_setup_banks()
     else:
         render_setup_categories()
-
 
 # ---------------- Enhanced Categorisation Page ----------------
 def render_categorisation():
@@ -1331,19 +1443,35 @@ def render_categorisation():
         month_idx = month_names.index(month) + 1
         last_day = calendar.monthrange(year, month_idx)[1]
         
-        if st.session_state.date_from is None:
+        # Initialize dates if None - FIXED DATE RANGE ERROR
+        try:
+            if st.session_state.date_from is None:
+                st.session_state.date_from = dt.date(year, month_idx, 1)
+            if st.session_state.date_to is None:
+                st.session_state.date_to = dt.date(year, month_idx, last_day)
+            
+            default_range = (
+                st.session_state.date_from,
+                st.session_state.date_to,
+            )
+            dr = st.date_input("Date Range", value=default_range, label_visibility="collapsed")
+            
+            # Handle date input correctly
+            if isinstance(dr, tuple) and len(dr) == 2:
+                date_from, date_to = dr
+            else:
+                date_from = dr
+                date_to = dr
+            
+            st.session_state.date_from = date_from
+            st.session_state.date_to = date_to
+            
+        except Exception as e:
+            # If error, set sensible defaults
             st.session_state.date_from = dt.date(year, month_idx, 1)
-        if st.session_state.date_to is None:
             st.session_state.date_to = dt.date(year, month_idx, last_day)
-        
-        default_range = (
-            st.session_state.date_from,
-            st.session_state.date_to,
-        )
-        dr = st.date_input("Date Range", value=default_range, label_visibility="collapsed")
-        date_from, date_to = dr if isinstance(dr, tuple) else (dr, dr)
-        st.session_state.date_from = date_from
-        st.session_state.date_to = date_to
+            date_from = st.session_state.date_from
+            date_to = st.session_state.date_to
 
     # --- Get data summaries ---
     draft_summary = None
@@ -1362,7 +1490,7 @@ def render_categorisation():
         
         with col1:
             stmt_template = pd.DataFrame([
-                {"Date": "2025-10-01", "Description": "POS Purchase Example", "Dr": 100.00, "Cr": 0.00, "Closing": ""}
+                {"Date": "25/09/2025", "Description": "POS Purchase Example", "Dr": 100.00, "Cr": 0.00, "Closing": ""}
             ])
             buf = io.StringIO()
             stmt_template.to_csv(buf, index=False)
@@ -1406,23 +1534,41 @@ def render_categorisation():
             with map_cols[4]:
                 map_bal = st.selectbox("Closing Balance", cols, index=cols.index("Closing") if "Closing" in cols else 0)
             
+            # FIXED DATE PARSING FOR dd/mm/yyyy FORMAT
             def _to_date(x):
                 if pd.isna(x):
                     return None
                 try:
                     if isinstance(x, str):
                         x_str = str(x).strip()
-                        for fmt in ["%Y-%m-%d", "%d/%m/%Y", "%m/%d/%Y", "%d-%m-%Y", "%Y/%m/%d", "%d %b %Y", "%d %B %Y"]:
+                        
+                        # Handle different date formats
+                        formats_to_try = [
+                            "%d/%m/%Y",  # 25/09/2025
+                            "%d-%m-%Y",  # 25-09-2025
+                            "%Y-%m-%d",  # 2025-09-25
+                            "%Y/%m/%d",  # 2025/09/25
+                            "%d %b %Y",  # 25 Sep 2025
+                            "%d %B %Y",  # 25 September 2025
+                        ]
+                        
+                        for fmt in formats_to_try:
                             try:
                                 return dt.datetime.strptime(x_str, fmt).date()
                             except:
                                 continue
-                        if "/" in x_str:
-                            parts = x_str.split("/")
-                            if len(parts) == 3:
-                                if len(parts[2]) == 4:
-                                    return dt.date(int(parts[2]), int(parts[1]), int(parts[0]))
-                    return pd.to_datetime(x, dayfirst=True).date()
+                        
+                        # If still not parsed, try dayfirst
+                        try:
+                            return pd.to_datetime(x_str, dayfirst=True).date()
+                        except:
+                            return None
+                    
+                    # If already a datetime or date
+                    if isinstance(x, (dt.datetime, dt.date)):
+                        return x.date() if isinstance(x, dt.datetime) else x
+                    
+                    return None
                 except Exception:
                     return None
             
@@ -1431,30 +1577,42 @@ def render_categorisation():
                 standardized_rows = []
                 dropped_missing_date = 0
                 dropped_missing_desc = 0
+                date_errors = []
                 
                 for idx, r in df_raw.iterrows():
                     d = _to_date(r[map_date]) if map_date != "(blank)" else None
                     ds = str(r[map_desc]).strip() if map_desc != "(blank)" else ""
                     
-                    if not d and ds:
-                        d = dt.date(year, month_names.index(month) + 1, 1)
-                        dropped_missing_date += 1
+                    # If date missing or parsing failed
+                    if not d:
+                        if ds:  # If description exists, use period start date
+                            d = dt.date(year, month_names.index(month) + 1, 1)
+                            dropped_missing_date += 1
+                        else:
+                            dropped_missing_desc += 1
+                            continue
                     
+                    # Drop if description missing
                     if not ds:
                         dropped_missing_desc += 1
                         continue
                     
-                    drv = pd.to_numeric(r[map_dr], errors="coerce") if map_dr != "(blank)" else 0
-                    crv = pd.to_numeric(r[map_cr], errors="coerce") if map_cr != "(blank)" else 0
-                    bal = pd.to_numeric(r[map_bal], errors="coerce") if map_bal != "(blank)" else None
-                    
-                    standardized_rows.append({
-                        "tx_date": d,
-                        "description": ds,
-                        "debit": round(float(drv or 0.0), 2),
-                        "credit": round(float(crv or 0.0), 2),
-                        "balance": float(bal) if bal is not None else None,
-                    })
+                    # Parse amounts
+                    try:
+                        drv = pd.to_numeric(r[map_dr], errors="coerce") if map_dr != "(blank)" else 0
+                        crv = pd.to_numeric(r[map_cr], errors="coerce") if map_cr != "(blank)" else 0
+                        bal = pd.to_numeric(r[map_bal], errors="coerce") if map_bal != "(blank)" else None
+                        
+                        standardized_rows.append({
+                            "tx_date": d,
+                            "description": ds,
+                            "debit": round(float(drv or 0.0), 2),
+                            "credit": round(float(crv or 0.0), 2),
+                            "balance": float(bal) if bal is not None else None,
+                        })
+                    except Exception as e:
+                        date_errors.append(f"Row {idx+1}: {str(e)}")
+                        continue
                 
                 st.session_state.standardized_rows = standardized_rows
                 st.session_state.column_mapping = {
@@ -1466,11 +1624,15 @@ def render_categorisation():
                 }
                 
                 st.success(f"✅ Mapped {len(standardized_rows)} rows")
+                
+                if date_errors:
+                    st.warning(f"⚠️ {len(date_errors)} rows had date parsing issues")
+                
                 st.info(f"""
                 **Mapping Summary:**
                 - Original rows: {len(df_raw)}
                 - Successfully mapped: {len(standardized_rows)}
-                - Rows with missing date (used period default): {dropped_missing_date}
+                - Rows with missing/invalid date (used period default): {dropped_missing_date}
                 - Rows dropped (missing description): {dropped_missing_desc}
                 """)
                 
@@ -1705,7 +1867,7 @@ def render_categorisation():
             delta_color = "inverse" if pending_rows > 0 else "normal"
             st.metric("Pending Review", pending_rows, f"{pending_pct:.1f}%", delta_color=delta_color)
     
-    # --- Row 7: Action Buttons (FIXED COMMIT SECTION) ---
+    # --- Row 7: Action Buttons (WITH CAT ANIMATIONS) ---
     if has_selected_item:
         st.markdown("### 7. Actions")
         
@@ -1727,17 +1889,27 @@ def render_categorisation():
                                disabled=st.session_state.processing_suggestions):
                         if not st.session_state.processing_suggestions:
                             st.session_state.processing_suggestions = True
-                            progress = show_simple_loader("Generating AI Suggestions...")
+                            
+                            # Show cat animation
+                            cat_placeholder = st.empty()
+                            cat_placeholder.markdown(show_cat_thinking_animation("Cat is analyzing transactions..."), unsafe_allow_html=True)
+                            
                             try:
+                                # Process suggestions
                                 n = crud.process_suggestions(client_id, bank_id, period, 
                                                             bank_account_type=bank_obj.get("account_type"))
-                                progress.empty()
-                                st.success(f"✅ Categories suggested ({n} rows)")
+                                
+                                # Show success animation
+                                cat_placeholder.markdown(show_cat_success_animation(f"✅ Suggested {n} categories!"), unsafe_allow_html=True)
+                                
+                                time.sleep(1.5)  # Show success for 1.5 seconds
+                                cat_placeholder.empty()
+                                
                                 cache_data.clear()
                                 st.session_state.processing_suggestions = False
                                 st.rerun()
                             except Exception as e:
-                                progress.empty()
+                                cat_placeholder.empty()
                                 st.error(f"❌ Suggestion failed: {_format_exc(e)}")
                                 st.session_state.processing_suggestions = False
                 else:
@@ -1751,7 +1923,11 @@ def render_categorisation():
                         edited_data = st.session_state.draft_editor.get("edited_rows", {})
                         
                         if edited_data:
-                            st.info(f"Found {len(edited_data)} edited rows")
+                            # Show cat saving animation
+                            saving_placeholder = st.empty()
+                            saving_placeholder.markdown(show_cat_thinking_animation("Cat is saving your changes..."), unsafe_allow_html=True)
+                            
+                            time.sleep(1)  # Show animation for 1 second
                             
                             rows_to_save = []
                             for row_idx, changes in edited_data.items():
@@ -1775,12 +1951,20 @@ def render_categorisation():
                             if rows_to_save:
                                 try:
                                     updated = crud.save_review_changes(rows_to_save)
-                                    st.success(f"✅ Saved {updated} changes")
+                                    
+                                    # Show success animation
+                                    saving_placeholder.markdown(show_cat_success_animation(f"✅ Saved {updated} changes!"), unsafe_allow_html=True)
+                                    
+                                    time.sleep(1.5)
+                                    saving_placeholder.empty()
+                                    
                                     cache_data.clear()
                                     st.rerun()
                                 except Exception as e:
+                                    saving_placeholder.empty()
                                     st.error(f"❌ Save failed: {_format_exc(e)}")
                             else:
+                                saving_placeholder.empty()
                                 st.warning("No valid changes to save")
                         else:
                             st.info("No changes detected to save. Make edits in the table first.")
@@ -1789,48 +1973,76 @@ def render_categorisation():
             
             with action_cols[2]:
                 if final_count >= total_rows and total_rows > 0:
-                    # SIMPLE COMMIT BUTTON - FIXED VERSION
+                    # COMMIT SECTION WITH CAT ANIMATION
                     st.markdown("**Commit Final**")
                     
-                    # Show commit info
-                    st.info(f"✅ Ready to commit {total_rows} rows")
-                    
-                    # Simple commit button (no name required)
+                    # Commit button
                     if st.button("🔒 Commit Final Now", type="primary", use_container_width=True,
                                disabled=st.session_state.processing_commit, key="commit_final_button"):
                         
                         if not st.session_state.processing_commit:
                             st.session_state.processing_commit = True
                             
-                            # Show immediate feedback
-                            status_placeholder = st.empty()
-                            status_placeholder.info("🔄 Starting commit process...")
+                            # Show cat committing animation
+                            commit_placeholder = st.empty()
+                            commit_placeholder.markdown(show_cat_thinking_animation("Cat is locking transactions..."), unsafe_allow_html=True)
+                            
+                            time.sleep(1)  # Show animation for 1 second
                             
                             try:
-                                # Try to commit with default name
+                                # Call commit function
                                 result = crud.commit_period(client_id, bank_id, period, 
                                                           committed_by="Accountant")
                                 
-                                status_placeholder.empty()
+                                commit_placeholder.empty()
                                 
                                 if result.get("ok"):
-                                    st.success(f"✅ Successfully committed {result.get('rows', 0)} rows!")
+                                    # Show success animation with cat food
+                                    st.markdown(f"""
+                                    <div style="
+                                        text-align: center;
+                                        padding: 25px;
+                                        background: linear-gradient(135deg, #dcfce7, #bbf7d0);
+                                        border-radius: 12px;
+                                        border: 2px solid #86efac;
+                                        margin: 15px 0;
+                                    ">
+                                        <div style="font-size: 48px; margin-bottom: 15px; animation: bounce 0.8s;">
+                                            🎉😻🍗
+                                        </div>
+                                        <div style="color: #065f46; font-weight: 600; font-size: 18px; margin-bottom: 8px;">
+                                            ✅ Successfully committed {result.get('rows', 0)} rows!
+                                        </div>
+                                        <div style="color: #047857; font-size: 14px;">
+                                            "Yum! Transactions are locked and safe!"
+                                        </div>
+                                        <div style="color: #059669; font-size: 12px; margin-top: 10px;">
+                                            Accuracy: {result.get('accuracy', 0)*100:.1f}%
+                                        </div>
+                                    </div>
+                                    <style>
+                                    @keyframes bounce {{
+                                        0%, 100% {{ transform: translateY(0); }}
+                                        50% {{ transform: translateY(-10px); }}
+                                    }}
+                                    </style>
+                                    """, unsafe_allow_html=True)
                                     
-                                    # Clear states immediately
+                                    # Clear states and refresh
                                     st.session_state.categorisation_selected_item = None
                                     st.session_state.standardized_rows = []
                                     st.session_state.df_raw = None
                                     st.session_state.processing_commit = False
                                     cache_data.clear()
                                     
-                                    # Force immediate rerun
+                                    # Auto refresh after 3 seconds
+                                    time.sleep(3)
                                     st.rerun()
                                 else:
                                     st.error(f"❌ Commit failed: {result.get('msg', 'Unknown error')}")
                                     st.session_state.processing_commit = False
-                                    
                             except Exception as e:
-                                status_placeholder.empty()
+                                commit_placeholder.empty()
                                 st.error(f"❌ Commit error: {_format_exc(e)}")
                                 st.session_state.processing_commit = False
                 else:
@@ -1868,15 +2080,26 @@ def render_categorisation():
             
             st.markdown("### 6. Save Draft")
             if st.button("💾 Save Draft", type="primary", use_container_width=True):
+                # Show cat animation
+                save_placeholder = st.empty()
+                save_placeholder.markdown(show_cat_thinking_animation("Cat is saving draft..."), unsafe_allow_html=True)
+                
                 try:
                     n = crud.insert_draft_rows(client_id, bank_id, period, 
                                               st.session_state.standardized_rows, replace=True)
-                    st.success(f"✅ Draft saved ({n} rows)")
+                    
+                    # Show success
+                    save_placeholder.markdown(show_cat_success_animation(f"✅ Draft saved ({n} rows)!"), unsafe_allow_html=True)
+                    
+                    time.sleep(1.5)
+                    save_placeholder.empty()
+                    
                     st.session_state.standardized_rows = []
                     st.session_state.df_raw = None
                     cache_data.clear()
                     st.rerun()
                 except Exception as e:
+                    save_placeholder.empty()
                     st.error(f"❌ Save failed: {_format_exc(e)}")
 
 def render_settings():
@@ -1992,7 +2215,6 @@ def render_settings():
     else:
         st.info("Select a client to see cleanup options.")
 
-
 # ---------------- Main Page Router ----------------
 def main():
     page = st.session_state.active_page
@@ -2031,7 +2253,6 @@ def main():
         }}, 100);
         </script>
         """, unsafe_allow_html=True)
-
 
 if __name__ == "__main__":
     main()
