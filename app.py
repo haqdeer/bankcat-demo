@@ -1,4 +1,4 @@
-# app.py - COMPLETE FIXED VERSION WITH ENHANCED POPUP ANIMATIONS
+# app.py - COMPLETE FIXED VERSION WITH AUTO-CLOSING POPUPS
 import io
 import sys
 import calendar
@@ -221,6 +221,8 @@ def init_session_state():
         "cat_popup_message": st.session_state.get("cat_popup_message", ""),
         "cat_popup_type": st.session_state.get("cat_popup_type", "thinking"),
         "cat_popup_details": st.session_state.get("cat_popup_details", {}),
+        "cat_popup_auto_close": st.session_state.get("cat_popup_auto_close", False),
+        "cat_popup_close_time": st.session_state.get("cat_popup_close_time", 0),
     }
     
     for key, default_value in defaults.items():
@@ -275,19 +277,6 @@ def show_cat_popup():
             <div style="color: #6b7280; font-size: 15px; margin-bottom: 25px; line-height: 1.5;">
                 "Meow! Processing your request..."
             </div>
-            <button onclick="document.getElementById('cat-popup').remove();" style="
-                background: #ef4444;
-                color: white;
-                border: none;
-                padding: 10px 24px;
-                border-radius: 8px;
-                font-weight: 600;
-                cursor: pointer;
-                font-size: 14px;
-                transition: background 0.2s;
-            ">
-                Close
-            </button>
         </div>
         <style>
         @keyframes popIn {{
@@ -302,6 +291,7 @@ def show_cat_popup():
         """
     
     elif popup_type == "success":
+        accuracy = details.get("accuracy", None)
         popup_html = f"""
         <div id="cat-popup" style="
             position: fixed;
@@ -325,22 +315,13 @@ def show_cat_popup():
             <div style="color: #065f46; font-weight: 800; font-size: 22px; margin-bottom: 12px;">
                 {message}
             </div>
-            <div style="color: #047857; font-size: 16px; margin-bottom: 25px; line-height: 1.5;">
+            <div style="color: #047857; font-size: 16px; margin-bottom: 20px; line-height: 1.5;">
                 "Purrrrfect! All done!"
             </div>
-            <button onclick="document.getElementById('cat-popup').remove();" style="
-                background: #10b981;
-                color: white;
-                border: none;
-                padding: 10px 24px;
-                border-radius: 8px;
-                font-weight: 600;
-                cursor: pointer;
-                font-size: 14px;
-                transition: background 0.2s;
-            ">
-                Awesome!
-            </button>
+            {f'<div style="color: #059669; font-size: 14px; margin-bottom: 20px; font-weight: 600;">Accuracy: {accuracy:.1f}%</div>' if accuracy is not None else ''}
+            <div style="color: #6b7280; font-size: 13px; font-style: italic;">
+                (Popup will close automatically...)
+            </div>
         </div>
         <style>
         @keyframes popIn {{
@@ -351,94 +332,6 @@ def show_cat_popup():
             0% {{ transform: scale(0.5); opacity: 0; }}
             60% {{ transform: scale(1.1); }}
             100% {{ transform: scale(1); opacity: 1; }}
-        }}
-        </style>
-        """
-    
-    elif popup_type == "processing":
-        row_num = details.get("row_num", 0)
-        total_rows = details.get("total_rows", 0)
-        category = details.get("category", "")
-        vendor = details.get("vendor", "")
-        
-        progress_pct = (row_num / total_rows * 100) if total_rows > 0 else 0
-        
-        cat_actions = [
-            "🔍 Sniffing transaction...",
-            "🧠 Analyzing pattern...",
-            "🏷️ Finding category...",
-            "🏢 Identifying vendor...",
-            "✅ Almost there..."
-        ]
-        
-        if row_num <= total_rows:
-            action_idx = min(row_num % len(cat_actions), len(cat_actions)-1)
-            action = cat_actions[action_idx]
-        else:
-            action = "Finishing up..."
-        
-        popup_html = f"""
-        <div id="cat-popup" style="
-            position: fixed;
-            top: 50%;
-            left: 50%;
-            transform: translate(-50%, -50%);
-            background: white;
-            padding: 30px 35px;
-            border-radius: 16px;
-            box-shadow: 0 20px 60px rgba(0,0,0,0.25);
-            z-index: 9999;
-            border: 2px solid #e5e7eb;
-            min-width: 380px;
-            max-width: 480px;
-            animation: popIn 0.4s cubic-bezier(0.18, 0.89, 0.32, 1.28);
-        ">
-            <div style="display: flex; align-items: center; margin-bottom: 25px;">
-                <div style="font-size: 48px; margin-right: 20px; animation: bounce 1s infinite;">😼</div>
-                <div style="flex-grow: 1;">
-                    <div style="color: #1f2937; font-weight: 700; font-size: 18px; margin-bottom: 5px;">{action}</div>
-                    <div style="color: #6b7280; font-size: 14px;">Row {row_num} of {total_rows}</div>
-                </div>
-                <div style="font-size: 28px; color: #9ca3af; margin: 0 15px;">→</div>
-                <div style="text-align: right;">
-                    <div style="color: #10b981; font-weight: 700; font-size: 16px;">{category}</div>
-                    <div style="color: #6b7280; font-size: 13px;">{vendor}</div>
-                </div>
-            </div>
-            
-            <div style="width: 100%; height: 10px; background: #f3f4f6; border-radius: 5px; overflow: hidden; margin-bottom: 15px;">
-                <div style="width: {progress_pct}%; height: 100%; background: linear-gradient(90deg, #7CFFB2, #10b981); 
-                        border-radius: 5px; transition: width 0.5s ease-in-out;"></div>
-            </div>
-            
-            <div style="display: flex; justify-content: space-between; margin-bottom: 25px; font-size: 12px; color: #6b7280;">
-                <div>🐾 Cat is working hard...</div>
-                <div><strong>{progress_pct:.1f}%</strong> complete</div>
-            </div>
-            
-            <button onclick="document.getElementById('cat-popup').remove();" style="
-                background: #ef4444;
-                color: white;
-                border: none;
-                padding: 10px 24px;
-                border-radius: 8px;
-                font-weight: 600;
-                cursor: pointer;
-                font-size: 14px;
-                transition: background 0.2s;
-                width: 100%;
-            ">
-                Cancel Processing
-            </button>
-        </div>
-        <style>
-        @keyframes popIn {{
-            0% {{ transform: translate(-50%, -50%) scale(0.7); opacity: 0; }}
-            100% {{ transform: translate(-50%, -50%) scale(1); opacity: 1; }}
-        }}
-        @keyframes bounce {{
-            0%, 100% {{ transform: translateY(0); }}
-            50% {{ transform: translateY(-8px); }}
         }}
         </style>
         """
@@ -464,54 +357,64 @@ def show_cat_popup():
             <div style="color: #1f2937; font-weight: 700; font-size: 20px; margin-bottom: 10px;">
                 {message}
             </div>
-            <button onclick="document.getElementById('cat-popup').remove();" style="
-                background: #ef4444;
-                color: white;
-                border: none;
-                padding: 10px 20px;
-                border-radius: 8px;
-                font-weight: 600;
-                cursor: pointer;
-                margin-top: 20px;
-            ">
-                Close
-            </button>
         </div>
         """
     
-    return popup_html
+    # Add overlay
+    overlay_html = """
+    <div id="cat-popup-overlay" style="
+        position: fixed;
+        top: 0;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        background: rgba(0, 0, 0, 0.4);
+        z-index: 9998;
+        backdrop-filter: blur(3px);
+        animation: fadeIn 0.3s ease-out;
+    "></div>
+    <style>
+    @keyframes fadeIn {
+        from { opacity: 0; }
+        to { opacity: 1; }
+    }
+    </style>
+    """
+    
+    return overlay_html + popup_html
 
-def show_cat_thinking_popup(message="Cat is thinking..."):
+def show_cat_thinking_popup(message="Cat is thinking...", auto_close=False):
     """Show cat thinking popup"""
     st.session_state.show_cat_popup = True
     st.session_state.cat_popup_message = message
     st.session_state.cat_popup_type = "thinking"
+    st.session_state.cat_popup_auto_close = auto_close
+    if auto_close:
+        st.session_state.cat_popup_close_time = time.time()
     st.rerun()
 
-def show_cat_success_popup(message="Success!"):
+def show_cat_success_popup(message="Success!", details=None, auto_close=True):
     """Show cat success popup"""
     st.session_state.show_cat_popup = True
     st.session_state.cat_popup_message = message
     st.session_state.cat_popup_type = "success"
-    st.rerun()
-
-def show_cat_processing_popup(row_num=0, total_rows=0, category="", vendor=""):
-    """Show cat processing popup"""
-    st.session_state.show_cat_popup = True
-    st.session_state.cat_popup_message = "Processing rows..."
-    st.session_state.cat_popup_type = "processing"
-    st.session_state.cat_popup_details = {
-        "row_num": row_num,
-        "total_rows": total_rows,
-        "category": category,
-        "vendor": vendor
-    }
+    st.session_state.cat_popup_details = details or {}
+    st.session_state.cat_popup_auto_close = auto_close
+    if auto_close:
+        st.session_state.cat_popup_close_time = time.time()
     st.rerun()
 
 def close_cat_popup():
     """Close the cat popup"""
     st.session_state.show_cat_popup = False
+    st.session_state.cat_popup_auto_close = False
     st.rerun()
+
+# Check if popup should auto-close
+if st.session_state.show_cat_popup and st.session_state.cat_popup_auto_close:
+    current_time = time.time()
+    if current_time - st.session_state.cat_popup_close_time > 2:  # Auto-close after 2 seconds
+        close_cat_popup()
 
 # ---------------- Simple Loader ----------------
 def show_simple_loader(message="Processing..."):
@@ -704,24 +607,6 @@ st.markdown(
     animation: highlightRow 2s ease-out;
 }
 
-/* NEW: Cat popup overlay */
-.cat-popup-overlay {
-    position: fixed;
-    top: 0;
-    left: 0;
-    right: 0;
-    bottom: 0;
-    background: rgba(0, 0, 0, 0.4);
-    z-index: 9998;
-    backdrop-filter: blur(3px);
-    animation: fadeIn 0.3s ease-out;
-}
-
-@keyframes fadeIn {
-    from { opacity: 0; }
-    to { opacity: 1; }
-}
-
 /* Button improvements */
 .stButton > button {
     border-radius: 8px !important;
@@ -775,9 +660,6 @@ else:
 
 # ---------------- Show Cat Popup if Active ----------------
 if st.session_state.show_cat_popup:
-    # Add overlay
-    st.markdown('<div class="cat-popup-overlay"></div>', unsafe_allow_html=True)
-    # Show popup
     st.markdown(show_cat_popup(), unsafe_allow_html=True)
 
 # ---------------- Page Transition Handler ----------------
@@ -2019,7 +1901,7 @@ def render_categorisation():
             delta_color = "inverse" if pending_rows > 0 else "normal"
             st.metric("Pending Review", pending_rows, f"{pending_pct:.1f}%", delta_color=delta_color)
     
-    # --- Row 7: Action Buttons (WITH ENHANCED POPUP ANIMATIONS) ---
+    # --- Row 7: Action Buttons (WITH AUTO-CLOSING POPUPS) ---
     if has_selected_item:
         st.markdown("### 7. Actions")
         
@@ -2051,12 +1933,7 @@ def render_categorisation():
                                                             bank_account_type=bank_obj.get("account_type"))
                                 
                                 # Close thinking popup and show success popup
-                                time.sleep(0.5)
-                                show_cat_success_popup(f"✅ Suggested {n} categories!")
-                                
-                                # Auto-close after 2 seconds
-                                time.sleep(2)
-                                close_cat_popup()
+                                show_cat_success_popup(f"✅ Suggested {n} categories!", details={})
                                 
                                 cache_data.clear()
                                 st.session_state.processing_suggestions = False
@@ -2103,12 +1980,7 @@ def render_categorisation():
                                     updated = crud.save_review_changes(rows_to_save)
                                     
                                     # Show success popup
-                                    time.sleep(0.5)
-                                    show_cat_success_popup(f"✅ Saved {updated} changes!")
-                                    
-                                    # Auto-close after 1.5 seconds
-                                    time.sleep(1.5)
-                                    close_cat_popup()
+                                    show_cat_success_popup(f"✅ Saved {updated} changes!", details={})
                                     
                                     cache_data.clear()
                                     st.rerun()
@@ -2143,15 +2015,12 @@ def render_categorisation():
                                 result = crud.commit_period(client_id, bank_id, period, 
                                                           committed_by="Accountant")
                                 
-                                # Close thinking popup and show success popup
-                                time.sleep(0.5)
-                                
+                                # Show success popup
                                 if result.get("ok"):
-                                    # Show success popup with cat food
-                                    st.session_state.show_cat_popup = True
-                                    st.session_state.cat_popup_message = f"✅ Successfully committed {result.get('rows', 0)} rows!"
-                                    st.session_state.cat_popup_type = "success"
-                                    st.session_state.cat_popup_details = {"accuracy": result.get('accuracy', 0)*100}
+                                    show_cat_success_popup(
+                                        f"✅ Successfully committed {result.get('rows', 0)} rows!",
+                                        details={"accuracy": result.get('accuracy', 0)*100}
+                                    )
                                     
                                     # Clear states and refresh
                                     st.session_state.categorisation_selected_item = None
@@ -2159,10 +2028,6 @@ def render_categorisation():
                                     st.session_state.df_raw = None
                                     st.session_state.processing_commit = False
                                     cache_data.clear()
-                                    
-                                    # Auto refresh after 3 seconds
-                                    time.sleep(3)
-                                    close_cat_popup()
                                     st.rerun()
                                 else:
                                     close_cat_popup()
@@ -2215,12 +2080,7 @@ def render_categorisation():
                                               st.session_state.standardized_rows, replace=True)
                     
                     # Show success popup
-                    time.sleep(0.5)
-                    show_cat_success_popup(f"✅ Draft saved ({n} rows)!")
-                    
-                    # Auto-close after 1.5 seconds
-                    time.sleep(1.5)
-                    close_cat_popup()
+                    show_cat_success_popup(f"✅ Draft saved ({n} rows)!", details={})
                     
                     st.session_state.standardized_rows = []
                     st.session_state.df_raw = None
