@@ -1585,9 +1585,632 @@ def render_categories_edit(client_id):
         st.markdown('</div>', unsafe_allow_html=True)
 
 def render_categorisation():
-    # [This function remains EXACTLY THE SAME as in the previous version]
-    # Only render_home and render_settings were modified
-    pass
+    st.markdown("## 🧠 Categorisation")
+    
+    client_id = _require_active_client()
+    if not client_id:
+        return
+
+    try:
+        banks_active = crud.list_banks(client_id, include_inactive=False)
+    except Exception as e:
+        show_error_message(f"Unable to load active banks. {_format_exc(e)}")
+        return
+
+    if not banks_active:
+        with st.container():
+            st.markdown('<div class="section-card">', unsafe_allow_html=True)
+            st.info("Add at least 1 active bank first.")
+            if st.button("🏦 Add Bank", type="primary"):
+                handle_page_transition("Setup", "Banks")
+            st.markdown('</div>', unsafe_allow_html=True)
+        return
+
+    # --- Step 1: Bank Selection ---
+    with st.container():
+        st.markdown('<div class="section-card">', unsafe_allow_html=True)
+        st.markdown("### 1. Select Bank")
+        bank_options = []
+        for b in banks_active:
+            bank_options.append(f"{b['id']} | {b['bank_name']} ({b['account_type']})")
+        
+        selected_index = 0
+        if st.session_state.bank_id:
+            for i, opt in enumerate(bank_options):
+                if opt.startswith(f"{st.session_state.bank_id} |"):
+                    selected_index = i
+                    break
+        
+        bank_pick = st.selectbox("Select Bank", bank_options, index=selected_index, label_visibility="collapsed")
+        bank_id = int(bank_pick.split("|")[0].strip())
+        st.session_state.bank_id = bank_id
+        bank_obj = [b for b in banks_active if int(b["id"]) == bank_id][0]
+        st.markdown('</div>', unsafe_allow_html=True)
+
+    # --- Step 2: Period Selection ---
+    with st.container():
+        st.markdown('<div class="section-card">', unsafe_allow_html=True)
+        st.markdown("### 2. Period Selection")
+        col1, col2, col3, col4 = st.columns([1, 1, 1, 2])
+        
+        month_names = [
+            "Jan", "Feb", "Mar", "Apr", "May", "Jun",
+            "Jul", "Aug", "Sep", "Oct", "Nov", "Dec",
+        ]
+        
+        with col1:
+            year_range = list(range(2020, 2031))
+            year = st.selectbox("Year", year_range, index=year_range.index(st.session_state.year))
+            st.session_state.year = year
+        
+        with col2:
+            month = st.selectbox("Month", month_names, index=month_names.index(st.session_state.month))
+            st.session_state.month = month
+        
+        with col3:
+            period = f"{year}-{month_names.index(month)+1:02d}"
+            st.text_input("Period", value=period, disabled=True)
+            st.session_state.period = period
+        
+        with col4:
+            month_idx = month_names.index(month) + 1
+            last_day = calendar.monthrange(year, month_idx)[1]
+            
+            try:
+                if st.session_state.date_from is None:
+                    st.session_state.date_from = dt.date(year, month_idx, 1)
+                if st.session_state.date_to is None:
+                    st.session_state.date_to = dt.date(year, month_idx, last_day)
+                
+                default_range = (
+                    st.session_state.date_from,
+                    st.session_state.date_to,
+                )
+                dr = st.date_input("Date Range", value=default_range, label_visibility="collapsed")
+                
+                if isinstance(dr, tuple) and len(dr) == 2:
+                    date_from, date_to = dr
+                else:
+                    date_from = dr
+                    date_to = dr
+                
+                st.session_state.date_from = date_from
+                st.session_state.date_to = date_to
+                
+            except Exception as e:
+                st.session_state.date_from = dt.date(year, month_idx, 1)
+                st.session_state.date_to = dt.date(year, month_idx, last_day)
+                date_from = st.session_state.date_from
+                date_to = st.session_state.date_to
+        
+        st.markdown('</div>', unsafe_allow_html=True)
+
+    # --- Get data summaries ---
+    draft_summary = None
+    commit_summary = None
+    try:
+        draft_summary = crud.get_draft_summary(client_id, bank_id, period)
+        commit_summary = crud.get_commit_summary(client_id, bank_id, period)
+    except Exception as e:
+        show_error_message(f"Error loading summaries: {_format_exc(e)}")
+
+    # --- Step 3: Upload Section (only if no data exists) ---
+    if not draft_summary and not commit_summary:
+        with st.container():
+            st.markdown('<div class="section-card">', unsafe_allow_html=True)
+            st.markdown("### 3. Upload Statement")
+            
+            col1, col2 = st.columns([1, 2])
+            
+            with col1:
+                stmt_template = pd.DataFrame([
+                    {"Date": "25/09/2025", "Description": "POS Purchase Example", "Dr": 100.00, "Cr": 0.00, "Closing": ""}
+                ])
+                buf = io.StringIO()
+                stmt_template.to_csv(buf, index=False)
+                st.download_button(
+                    "📥 Download Template",
+                    data=buf.getvalue(),
+                    file_name="statement_template.csv",
+                    mime="text/csv",
+                    use_container_width=True
+                )
+            
+            with col2:
+                up_stmt = st.file_uploader("Upload CSV statement", type=["csv"], key="stmt_csv", label_visibility="collapsed")
+                
+                if up_stmt is not None:
+                    try:
+                        df_raw = pd.read_csv(up_stmt)
+                        st.session_state.df_raw = df_raw
+                        st.session_state.file_uploaded = True
+                        show_success_message(f"✅ Loaded {len(df_raw)} rows")
+                    except Exception as e:
+                        show_error_message(f"❌ Upload failed: {_format_exc(e)}")
+                else:
+                    df_raw = st.session_state.df_raw
+
+            # Column Mapping
+            if df_raw is not None and len(df_raw) > 0:
+                st.markdown("#### Column Mapping")
+                
+                cols = ["(blank)"] + list(df_raw.columns)
+                map_cols = st.columns(5)
+                
+                with map_cols[0]:
+                    map_date = st.selectbox("Date *", cols, index=cols.index("Date") if "Date" in cols else 0)
+                with map_cols[1]:
+                    map_desc = st.selectbox("Description *", cols, index=cols.index("Description") if "Description" in cols else 0)
+                with map_cols[2]:
+                    map_dr = st.selectbox("Debit (Dr)", cols, index=cols.index("Dr") if "Dr" in cols else 0)
+                with map_cols[3]:
+                    map_cr = st.selectbox("Credit (Cr)", cols, index=cols.index("Cr") if "Cr" in cols else 0)
+                with map_cols[4]:
+                    map_bal = st.selectbox("Closing Balance", cols, index=cols.index("Closing") if "Closing" in cols else 0)
+                
+                # Date parsing function
+                def _to_date(x):
+                    if pd.isna(x):
+                        return None
+                    try:
+                        if isinstance(x, str):
+                            x_str = str(x).strip()
+                            formats_to_try = [
+                                "%d/%m/%Y", "%d-%m-%Y", "%Y-%m-%d", "%Y/%m/%d",
+                                "%d %b %Y", "%d %B %Y"
+                            ]
+                            for fmt in formats_to_try:
+                                try:
+                                    return dt.datetime.strptime(x_str, fmt).date()
+                                except:
+                                    continue
+                            try:
+                                return pd.to_datetime(x_str, dayfirst=True).date()
+                            except:
+                                return None
+                        if isinstance(x, (dt.datetime, dt.date)):
+                            return x.date() if isinstance(x, dt.datetime) else x
+                        return None
+                    except Exception:
+                        return None
+                
+                # Process rows button
+                if st.button("Apply Mapping", type="primary", key="apply_mapping", use_container_width=True):
+                    standardized_rows = []
+                    dropped_missing_date = 0
+                    dropped_missing_desc = 0
+                    date_errors = []
+                    
+                    for idx, r in df_raw.iterrows():
+                        d = _to_date(r[map_date]) if map_date != "(blank)" else None
+                        ds = str(r[map_desc]).strip() if map_desc != "(blank)" else ""
+                        
+                        if not d:
+                            if ds:
+                                d = dt.date(year, month_names.index(month) + 1, 1)
+                                dropped_missing_date += 1
+                            else:
+                                dropped_missing_desc += 1
+                                continue
+                        
+                        if not ds:
+                            dropped_missing_desc += 1
+                            continue
+                        
+                        try:
+                            drv = pd.to_numeric(r[map_dr], errors="coerce") if map_dr != "(blank)" else 0
+                            crv = pd.to_numeric(r[map_cr], errors="coerce") if map_cr != "(blank)" else 0
+                            bal = pd.to_numeric(r[map_bal], errors="coerce") if map_bal != "(blank)" else None
+                            
+                            standardized_rows.append({
+                                "tx_date": d,
+                                "description": ds,
+                                "debit": round(float(drv or 0.0), 2),
+                                "credit": round(float(crv or 0.0), 2),
+                                "balance": float(bal) if bal is not None else None,
+                            })
+                        except Exception as e:
+                            date_errors.append(f"Row {idx+1}: {str(e)}")
+                            continue
+                    
+                    st.session_state.standardized_rows = standardized_rows
+                    st.session_state.column_mapping = {
+                        "date": map_date,
+                        "description": map_desc,
+                        "debit": map_dr,
+                        "credit": map_cr,
+                        "balance": map_bal
+                    }
+                    
+                    show_success_message(f"✅ Mapped {len(standardized_rows)} rows")
+                    
+                    if date_errors:
+                        show_warning_message(f"⚠️ {len(date_errors)} rows had date parsing issues")
+                    
+                    st.info(f"""
+                    **Mapping Summary:**
+                    - Original rows: {len(df_raw)}
+                    - Successfully mapped: {len(standardized_rows)}
+                    - Rows with missing/invalid date (used period default): {dropped_missing_date}
+                    - Rows dropped (missing description): {dropped_missing_desc}
+                    """)
+                    
+                    st.session_state.categorisation_selected_item = None
+                    st.rerun()
+            
+            st.markdown('</div>', unsafe_allow_html=True)
+
+    # --- Step 4: Saved Items Display ---
+    with st.container():
+        st.markdown('<div class="section-card">', unsafe_allow_html=True)
+        st.markdown("### 4. Saved Items")
+        
+        saved_items = []
+        
+        if draft_summary:
+            suggested_count = int(draft_summary.get("suggested_count") or 0)
+            final_count = int(draft_summary.get("final_count") or 0)
+            total_rows = int(draft_summary.get("row_count") or 0)
+            
+            status_label = ""
+            type_label = ""
+            badge_class = ""
+            
+            if suggested_count == 0:
+                status_label = "Draft Saved"
+                type_label = "Draft"
+                badge_class = "status-draft"
+            elif final_count < total_rows:
+                status_label = f"Categorised ({final_count}/{total_rows})"
+                type_label = "Draft Categorised"
+                badge_class = "status-categorised"
+            else:
+                status_label = "Ready to Commit"
+                type_label = "Draft Finalised"
+                badge_class = "status-committed"
+            
+            saved_items.append({
+                "id": f"draft_{client_id}_{bank_id}_{period}",
+                "type": type_label,
+                "status": status_label,
+                "badge_class": badge_class,
+                "row_count": total_rows,
+                "suggested_rows": suggested_count,
+                "final_rows": final_count,
+                "min_date": draft_summary.get("min_date"),
+                "max_date": draft_summary.get("max_date"),
+                "last_updated": draft_summary.get("last_saved") or "N/A",
+            })
+        
+        if commit_summary:
+            saved_items.append({
+                "id": f"committed_{commit_summary.get('commit_id')}",
+                "type": "Committed",
+                "status": "Committed",
+                "badge_class": "status-committed",
+                "row_count": int(commit_summary.get("row_count") or 0),
+                "min_date": commit_summary.get("min_date"),
+                "max_date": commit_summary.get("max_date"),
+                "last_updated": commit_summary.get("committed_at") or "N/A",
+            })
+        
+        # Display saved items
+        if saved_items:
+            selected_item_id = st.session_state.categorisation_selected_item
+            
+            for item in saved_items:
+                is_selected = (selected_item_id == item["id"])
+                
+                col1, col2, col3 = st.columns([2, 4, 2])
+                with col1:
+                    st.write(f"**{item['type']}**")
+                    st.write(f"Rows: {item['row_count']}")
+                with col2:
+                    st.markdown(f'<span class="status-badge {item["badge_class"]}">{item["status"]}</span>', unsafe_allow_html=True)
+                    if item.get("min_date") and item.get("max_date"):
+                        st.caption(f"{item['min_date']} to {item['max_date']}")
+                with col3:
+                    if is_selected:
+                        if st.button("✖ Deselect", key=f"deselect_{item['id']}", type="secondary", use_container_width=True):
+                            st.session_state.categorisation_selected_item = None
+                            st.rerun()
+                    else:
+                        if st.button("👉 Select", key=f"select_{item['id']}", type="primary", use_container_width=True):
+                            st.session_state.categorisation_selected_item = item["id"]
+                            st.rerun()
+                
+                if not is_selected:
+                    st.markdown("---")
+        else:
+            st.info("No saved items yet for this bank + period.")
+        
+        st.markdown('</div>', unsafe_allow_html=True)
+
+    # --- Check if item is selected ---
+    selected_item_id = st.session_state.categorisation_selected_item
+    has_selected_item = bool(selected_item_id)
+    
+    # --- Step 5: Main View Table ---
+    if has_selected_item:
+        with st.container():
+            st.markdown('<div class="section-card">', unsafe_allow_html=True)
+            st.markdown("### 5. Transaction Review")
+            
+            if selected_item_id and selected_item_id.startswith("draft_"):
+                try:
+                    draft_rows = crud.load_draft_rows(client_id, bank_id, period)
+                    if draft_rows:
+                        df_d = pd.DataFrame(draft_rows)
+                        
+                        categories = cached_categories(client_id)
+                        category_names = []
+                        
+                        for c in categories:
+                            if c.get("is_active", True):
+                                cat_name = c.get("category_name", "")
+                                category_names.append(cat_name)
+                        
+                        edited_df = st.data_editor(
+                            df_d,
+                            column_config={
+                                "id": st.column_config.NumberColumn("ID", disabled=True),
+                                "tx_date": st.column_config.DateColumn("Date", disabled=True),
+                                "description": st.column_config.TextColumn("Description", disabled=True),
+                                "debit": st.column_config.NumberColumn("Debit", format="%.2f", disabled=True),
+                                "credit": st.column_config.NumberColumn("Credit", format="%.2f", disabled=True),
+                                "balance": st.column_config.NumberColumn("Balance", format="%.2f", disabled=True),
+                                "suggested_category": st.column_config.TextColumn("AI Category", disabled=True),
+                                "suggested_vendor": st.column_config.TextColumn("AI Vendor", disabled=True),
+                                "confidence": st.column_config.NumberColumn("Confidence", format="%.1f%%", disabled=True),
+                                "final_category": st.column_config.SelectboxColumn(
+                                    "Final Category",
+                                    options=category_names,
+                                    required=False
+                                ),
+                                "final_vendor": st.column_config.TextColumn(
+                                    "Final Vendor",
+                                    required=False
+                                ),
+                            },
+                            column_order=[
+                                "tx_date", "description", "debit", "credit", 
+                                "suggested_category", "suggested_vendor", "confidence",
+                                "final_category", "final_vendor"
+                            ],
+                            use_container_width=True,
+                            hide_index=True,
+                            key="draft_editor"
+                        )
+                        
+                        if "draft_editor" in st.session_state:
+                            edited_data = st.session_state.draft_editor.get("edited_rows", {})
+                            if edited_data:
+                                for row_idx in edited_data.keys():
+                                    st.session_state.last_edited_row = int(row_idx)
+                                    st.session_state.last_edit_time = time.time()
+                        
+                    else:
+                        st.info("No draft rows found.")
+                except Exception as e:
+                    show_error_message(f"Unable to load draft rows: {_format_exc(e)}")
+            
+            elif selected_item_id and selected_item_id.startswith("committed"):
+                try:
+                    committed_rows = crud.load_committed_rows(client_id, bank_id, period)
+                    if committed_rows:
+                        df_c = pd.DataFrame(committed_rows)
+                        st.dataframe(df_c, use_container_width=True, hide_index=True)
+                    else:
+                        st.info("No committed rows found.")
+                except Exception as e:
+                    show_error_message(f"Unable to load committed rows: {_format_exc(e)}")
+            
+            st.markdown('</div>', unsafe_allow_html=True)
+    
+    # --- Step 6: Progress Summary ---
+    if has_selected_item and draft_summary and selected_item_id.startswith("draft_"):
+        with st.container():
+            st.markdown('<div class="section-card">', unsafe_allow_html=True)
+            st.markdown("### 6. Progress Summary")
+            
+            total_rows = int(draft_summary.get("row_count") or 0)
+            suggested_count = 0
+            if draft_summary:
+                suggested_count = int(draft_summary.get("suggested_count") or 0)
+            final_count = int(draft_summary.get("final_count") or 0)
+            pending_rows = total_rows - final_count
+            
+            col1, col2, col3, col4 = st.columns(4)
+            
+            with col1:
+                st.metric("Total Rows", total_rows)
+            
+            with col2:
+                suggested_pct = (suggested_count / total_rows * 100) if total_rows > 0 else 0
+                st.metric("AI Suggested", suggested_count, f"{suggested_pct:.1f}%")
+            
+            with col3:
+                final_pct = (final_count / total_rows * 100) if total_rows > 0 else 0
+                st.metric("User Finalised", final_count, f"{final_pct:.1f}%")
+            
+            with col4:
+                pending_pct = (pending_rows / total_rows * 100) if total_rows > 0 else 0
+                delta_color = "inverse" if pending_rows > 0 else "normal"
+                st.metric("Pending Review", pending_rows, f"{pending_pct:.1f}%", delta_color=delta_color)
+            
+            st.markdown('</div>', unsafe_allow_html=True)
+    
+    # --- Step 7: Action Buttons ---
+    if has_selected_item:
+        with st.container():
+            st.markdown('<div class="section-card">', unsafe_allow_html=True)
+            st.markdown("### 7. Actions")
+            
+            has_draft = bool(draft_summary)
+            has_commit = bool(commit_summary)
+            
+            if selected_item_id.startswith("draft_"):
+                suggested_count = 0
+                if draft_summary:
+                    suggested_count = int(draft_summary.get("suggested_count") or 0)
+                final_count = int(draft_summary.get("final_count") or 0)
+                total_rows = int(draft_summary.get("row_count") or 0)
+                
+                action_cols = st.columns(3)
+                
+                with action_cols[0]:
+                    if suggested_count == 0:
+                        if st.button("🤖 Suggest Categories", type="primary", use_container_width=True, 
+                                   disabled=st.session_state.processing_suggestions):
+                            if not st.session_state.processing_suggestions:
+                                st.session_state.processing_suggestions = True
+                                
+                                with st.spinner("😺 Cat is analyzing transactions..."):
+                                    try:
+                                        n = crud.process_suggestions(client_id, bank_id, period, 
+                                                                    bank_account_type=bank_obj.get("account_type"))
+                                        
+                                        show_success_message(f"✅ Suggested {n} categories!")
+                                        
+                                        cache_data.clear()
+                                        st.session_state.processing_suggestions = False
+                                        st.rerun()
+                                    except Exception as e:
+                                        show_error_message(f"❌ Suggestion failed: {_format_exc(e)}")
+                                        st.session_state.processing_suggestions = False
+                    else:
+                        if st.button("🔄 Re-suggest Categories", type="secondary", use_container_width=True,
+                                   disabled=st.session_state.processing_suggestions):
+                            show_info_message("Already suggested. Edit categories in the table above.")
+                
+                with action_cols[1]:
+                    if st.button("💾 Save Draft Changes", type="primary", use_container_width=True, key="save_draft_changes"):
+                        if "draft_editor" in st.session_state and st.session_state.draft_editor:
+                            edited_data = st.session_state.draft_editor.get("edited_rows", {})
+                            
+                            if edited_data:
+                                with st.spinner("😺 Cat is saving your changes..."):
+                                    rows_to_save = []
+                                    for row_idx, changes in edited_data.items():
+                                        row_idx = int(row_idx)
+                                        if row_idx < len(draft_rows):
+                                            original_row = draft_rows[row_idx]
+                                            final_cat = changes.get("final_category")
+                                            final_ven = changes.get("final_vendor")
+                                            
+                                            if final_cat is None or final_cat == "":
+                                                final_cat = original_row.get("final_category", "")
+                                            if final_ven is None or final_ven == "":
+                                                final_ven = original_row.get("final_vendor", "")
+                                            
+                                            rows_to_save.append({
+                                                "id": original_row["id"],
+                                                "final_category": final_cat,
+                                                "final_vendor": final_ven
+                                            })
+                                    
+                                    if rows_to_save:
+                                        try:
+                                            updated = crud.save_review_changes(rows_to_save)
+                                            show_success_message(f"✅ Saved {updated} changes!")
+                                            cache_data.clear()
+                                            st.rerun()
+                                        except Exception as e:
+                                            show_error_message(f"❌ Save failed: {_format_exc(e)}")
+                                    else:
+                                        show_warning_message("No valid changes to save")
+                            else:
+                                show_info_message("No changes detected to save. Make edits in the table first.")
+                        else:
+                            show_info_message("Make changes in the table above first, then save.")
+                
+                with action_cols[2]:
+                    if final_count >= total_rows and total_rows > 0:
+                        # COMMIT SECTION
+                        if st.button("🔒 Commit Final Now", type="primary", use_container_width=True,
+                                   disabled=st.session_state.processing_commit, key="commit_final_button"):
+                            
+                            if not st.session_state.processing_commit:
+                                st.session_state.processing_commit = True
+                                
+                                with st.spinner("😺 Cat is locking transactions..."):
+                                    try:
+                                        result = crud.commit_period(client_id, bank_id, period, 
+                                                                  committed_by="Accountant")
+                                        
+                                        if result.get("ok"):
+                                            show_success_message(f"✅ Successfully committed {result.get('rows', 0)} rows!")
+                                            st.balloons()
+                                            
+                                            # Clear states
+                                            st.session_state.categorisation_selected_item = None
+                                            st.session_state.standardized_rows = []
+                                            st.session_state.df_raw = None
+                                            st.session_state.processing_commit = False
+                                            cache_data.clear()
+                                            
+                                            # Wait and refresh
+                                            time.sleep(2)
+                                            st.rerun()
+                                        else:
+                                            show_error_message(f"❌ Commit failed: {result.get('msg', 'Unknown error')}")
+                                            st.session_state.processing_commit = False
+                                    except Exception as e:
+                                        show_error_message(f"❌ Commit error: {_format_exc(e)}")
+                                        st.session_state.processing_commit = False
+                    else:
+                        pending = total_rows - final_count
+                        st.info(f"📝 **Finalise {pending} more rows to commit**")
+            
+            elif selected_item_id.startswith("committed"):
+                st.success("✅ **Committed & Locked** - This data is now available in Reports")
+                
+                commit_info = crud.list_commit_metrics(
+                    client_id=client_id,
+                    bank_id=bank_id,
+                    period=period,
+                    date_from=date_from,
+                    date_to=date_to
+                )
+                
+                if commit_info:
+                    info = commit_info[0]
+                    col1, col2, col3 = st.columns(3)
+                    with col1:
+                        st.metric("Rows Committed", info.get("rows_committed", 0))
+                    with col2:
+                        st.metric("Accuracy", f"{info.get('accuracy', 0)*100:.1f}%")
+                    with col3:
+                        st.metric("Committed By", info.get("committed_by", "N/A"))
+            
+            st.markdown('</div>', unsafe_allow_html=True)
+    
+    # --- Show special message for upload state ---
+    elif not has_selected_item and not draft_summary and not commit_summary:
+        if st.session_state.standardized_rows and len(st.session_state.standardized_rows) > 0:
+            with st.container():
+                st.markdown('<div class="section-card">', unsafe_allow_html=True)
+                st.markdown("### 5. Mapped Data Preview")
+                df_uploaded = pd.DataFrame(st.session_state.standardized_rows)
+                st.info(f"📄 **Mapped Data ({len(df_uploaded)} rows)** - Ready to save as draft")
+                st.dataframe(df_uploaded, use_container_width=True, hide_index=True)
+                
+                st.markdown("### 6. Save Draft")
+                if st.button("💾 Save Draft", type="primary", use_container_width=True):
+                    with st.spinner("😺 Cat is saving draft..."):
+                        try:
+                            n = crud.insert_draft_rows(client_id, bank_id, period, 
+                                                      st.session_state.standardized_rows, replace=True)
+                            show_success_message(f"✅ Draft saved ({n} rows)!")
+                            
+                            st.session_state.standardized_rows = []
+                            st.session_state.df_raw = None
+                            cache_data.clear()
+                            st.rerun()
+                        except Exception as e:
+                            show_error_message(f"❌ Save failed: {_format_exc(e)}")
+                st.markdown('</div>', unsafe_allow_html=True)
+                
 
 # ---------------- Main Page Router ----------------
 def main():
