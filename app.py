@@ -599,7 +599,113 @@ def _select_active_client(clients: list[dict]) -> int | None:
 # ---------------- Page Render Functions ----------------
 # [All other render functions remain the SAME as before - Companies, Setup, etc.]
 # Only including Categorisation page which has the changes
+def render_home():
+    clients = cached_clients()
+    
+    # Client selector
+    options = ["(none)"] + [f"{c['id']} | {c['name']}" for c in clients]
+    selected_index = 0
+    if st.session_state.active_client_id:
+        for i, opt in enumerate(options):
+            if opt.startswith(f"{st.session_state.active_client_id} |"):
+                selected_index = i
+                break
+    
+    client_pick = st.selectbox(
+        "Select Client",
+        options=options,
+        index=selected_index,
+        key="home_client_select",
+    )
+    
+    if client_pick == "(none)":
+        st.session_state.active_client_id = None
+        st.session_state.active_client_name = None
+    else:
+        client_id = int(client_pick.split("|")[0].strip())
+        st.session_state.active_client_id = client_id
+        st.session_state.active_client_name = client_pick.split("|")[1].strip()
+        st.success(f"Selected: {st.session_state.active_client_name}")
+    
+    st.markdown("## Welcome to BankCat 🏦😺")
+    st.write("AI-powered bank statement categorization for accountants.")
+    
+    if st.session_state.active_client_id:
+        st.info(f"**Active Client:** {st.session_state.active_client_name}")
+        
+        # Quick stats
+        col1, col2, col3 = st.columns(3)
+        
+        with col1:
+            banks = cached_banks(st.session_state.active_client_id)
+            st.metric("Banks", len(banks) if banks else 0)
+        
+        with col2:
+            cats = cached_categories(st.session_state.active_client_id)
+            st.metric("Categories", len(cats) if cats else 0)
+        
+        with col3:
+            try:
+                drafts = crud.drafts_summary(st.session_state.active_client_id, None)
+                st.metric("Drafts", len(drafts) if drafts else 0)
+            except:
+                st.metric("Drafts", 0)
+    else:
+        st.warning("Please select a client to get started.")
+def render_dashboard():
+    st.markdown("## 📊 Financial Dashboard")
+    
+    client_id = _require_active_client()
+    if not client_id:
+        return
+    
+    col1, col2 = st.columns(2)
+    with col1:
+        start_date = st.date_input("Start Date", dt.date.today() - dt.timedelta(days=90))
+    with col2:
+        end_date = st.date_input("End Date", dt.date.today())
+    
+    if start_date > end_date:
+        st.error("Start date must be before end date.")
+        return
+    
+    try:
+        transactions = crud.list_committed_transactions(
+            client_id, 
+            date_from=start_date, 
+            date_to=end_date
+        )
+        
+        if transactions:
+            df = pd.DataFrame(transactions)
+            
+            # Income vs Expense
+            st.subheader("💰 Income vs Expense")
+            df['debit'] = pd.to_numeric(df['debit'], errors='coerce').fillna(0)
+            df['credit'] = pd.to_numeric(df['credit'], errors='coerce').fillna(0)
+            
+            total_income = df['credit'].sum()
+            total_expense = df['debit'].sum()
+            net = total_income - total_expense
+            
+            col1, col2, col3 = st.columns(3)
+            col1.metric("Total Income", f"${total_income:,.2f}")
+            col2.metric("Total Expense", f"${total_expense:,.2f}")
+            col3.metric("Net", f"${net:,.2f}", 
+                       delta_color="normal" if net >= 0 else "inverse")
+        else:
+            st.info("No committed transactions found for the selected period.")
+            
+    except Exception as e:
+        st.error(f"Unable to load dashboard data: {_format_exc(e)}")
 
+def _require_active_client() -> int | None:
+    client_id = st.session_state.active_client_id
+    if not client_id:
+        st.warning("Select a company on Home first.")
+        return None
+    return client_id
+    
 def render_categorisation():
     st.markdown("## 🧠 Categorisation")
     
