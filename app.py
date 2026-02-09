@@ -1,4 +1,4 @@
-# app.py - PROFESSIONAL UI/UX IMPROVEMENTS
+# app.py - FIXED: Column mapping back to single row, removed blank spaces
 import io
 import sys
 import calendar
@@ -231,7 +231,7 @@ def init_session_state():
 
 init_session_state()
 
-# ---------------- PROFESSIONAL UI/UX STYLING ----------------
+# ---------------- PROFESSIONAL UI/UX STYLING - FIXED VERSION ----------------
 st.markdown(
     """
 <style>
@@ -401,7 +401,7 @@ h3 {
 .professional-card {
     background: white !important;
     border-radius: 12px !important;
-    padding: 2rem !important;
+    padding: 1.75rem !important;
     margin-bottom: 1.5rem !important;
     border: 1px solid var(--gray-200) !important;
     box-shadow: var(--shadow-sm) !important;
@@ -412,15 +412,6 @@ h3 {
     box-shadow: var(--shadow-lg) !important;
     transform: translateY(-2px) !important;
     border-color: var(--gray-300) !important;
-}
-
-.card-header {
-    display: flex !important;
-    align-items: center !important;
-    justify-content: space-between !important;
-    margin-bottom: 1.5rem !important;
-    padding-bottom: 1rem !important;
-    border-bottom: 2px solid var(--gray-100) !important;
 }
 
 /* ========== ENHANCED FORM ELEMENTS ========== */
@@ -440,31 +431,12 @@ h3 {
     transform: translateY(-1px) !important;
 }
 
-.stSelectbox > div:hover, 
-.stTextInput > div:hover, 
-.stDateInput > div:hover,
-.stTextArea > div:hover {
-    border-color: var(--gray-400) !important;
-}
-
-/* Enhanced Labels */
-.css-1qg05tj {
-    font-weight: 500 !important;
-    color: var(--gray-700) !important;
-    margin-bottom: 0.5rem !important;
-}
-
 /* ========== PROFESSIONAL TABLES ========== */
 .stDataFrame {
     border-radius: 8px !important;
     border: 1px solid var(--gray-200) !important;
     overflow: hidden !important;
     box-shadow: var(--shadow-sm) !important;
-}
-
-.stDataFrame table {
-    border-collapse: separate !important;
-    border-spacing: 0 !important;
 }
 
 .stDataFrame thead tr {
@@ -484,11 +456,6 @@ h3 {
 }
 
 .stDataFrame tbody tr:hover {
-    background: var(--gray-50) !important;
-}
-
-/* Zebra striping for better readability */
-.stDataFrame tbody tr:nth-child(even) {
     background: var(--gray-50) !important;
 }
 
@@ -554,22 +521,6 @@ h3 {
     box-shadow: var(--shadow-sm) !important;
 }
 
-.stAlert[data-baseweb="notification"] {
-    border-left-color: var(--info) !important;
-}
-
-.stAlert[data-baseweb="notification"].st-emotion-cache-1c7j2y7 {
-    border-left-color: var(--success) !important;
-}
-
-.stAlert[data-baseweb="notification"].st-emotion-cache-1vzeuhh {
-    border-left-color: var(--error) !important;
-}
-
-.stAlert[data-baseweb="notification"].st-emotion-cache-1yf0qjw {
-    border-left-color: var(--warning) !important;
-}
-
 /* ========== PROFESSIONAL SIDEBAR ========== */
 section[data-testid="stSidebar"] {
     background: linear-gradient(180deg, #ffffff 0%, #f9fafb 100%) !important;
@@ -586,14 +537,6 @@ section[data-testid="stSidebar"] {
     margin-top: 1.5rem !important;
     margin-bottom: 0.75rem !important;
     padding-left: 1rem !important;
-}
-
-/* Sidebar logo */
-.sidebar-logo {
-    padding: 1.5rem 1rem 1rem !important;
-    text-align: center !important;
-    border-bottom: 1px solid var(--gray-200) !important;
-    margin-bottom: 1rem !important;
 }
 
 /* ========== METRIC CARDS ========== */
@@ -630,63 +573,12 @@ section[data-testid="stSidebar"] {
 /* ========== PROFESSIONAL DIVIDERS ========== */
 .section-divider {
     border-top: 1px solid var(--gray-200) !important;
-    margin: 2rem 0 !important;
+    margin: 1.5rem 0 !important;
 }
 
 .green-divider {
     border-top: 2px solid var(--primary-300) !important;
-    margin: 2rem 0 !important;
-}
-
-/* ========== LOADING & SKELETON STATES ========== */
-.skeleton {
-    background: linear-gradient(90deg, 
-                var(--gray-100) 25%, 
-                var(--gray-200) 50%, 
-                var(--gray-100) 75%) !important;
-    background-size: 200% 100% !important;
-    animation: skeleton-loading 1.5s infinite !important;
-    border-radius: 6px !important;
-}
-
-@keyframes skeleton-loading {
-    0% { background-position: 200% 0; }
-    100% { background-position: -200% 0; }
-}
-
-/* Professional spinner */
-.stSpinner > div {
-    border-top-color: var(--primary-500) !important;
-}
-
-/* ========== PAGE TRANSITIONS ========== */
-.fade-in-content {
-    animation: fadeIn 0.3s ease-in-out !important;
-}
-
-@keyframes fadeIn {
-    from { opacity: 0; transform: translateY(10px); }
-    to { opacity: 1; transform: translateY(0); }
-}
-
-/* ========== HIGHLIGHT ANIMATIONS ========== */
-@keyframes highlightRow {
-    0% { 
-        background-color: rgba(124, 255, 178, 0.4) !important;
-        box-shadow: inset 0 0 0 1px rgba(16, 185, 129, 0.3) !important;
-    }
-    70% { 
-        background-color: rgba(124, 255, 178, 0.1) !important;
-        box-shadow: inset 0 0 0 1px rgba(16, 185, 129, 0.1) !important;
-    }
-    100% { 
-        background-color: transparent !important;
-        box-shadow: none !important;
-    }
-}
-
-.highlight-row {
-    animation: highlightRow 2s ease-out !important;
+    margin: 1.5rem 0 !important;
 }
 
 /* ========== PAGE TITLE WITH ACCENT ========== */
@@ -750,16 +642,6 @@ section[data-testid="stSidebar"] {
     box-shadow: var(--shadow-sm) !important;
 }
 
-/* ========== TOOLTIPS & HELP TEXT ========== */
-.stTooltip {
-    background: var(--gray-800) !important;
-    color: white !important;
-    border-radius: 6px !important;
-    padding: 0.5rem 0.75rem !important;
-    font-size: 0.75rem !important;
-    box-shadow: var(--shadow-lg) !important;
-}
-
 /* ========== MOBILE RESPONSIVENESS ========== */
 @media (max-width: 768px) {
     .professional-card {
@@ -775,10 +657,6 @@ section[data-testid="stSidebar"] {
     .stButton > button {
         width: 100% !important;
         margin-bottom: 0.5rem !important;
-    }
-    
-    section[data-testid="stSidebar"] {
-        min-width: 250px !important;
     }
 }
 
@@ -807,50 +685,6 @@ section[data-testid="stSidebar"] {
     display: none !important;
 }
 
-/* ========== STEP INDICATORS ========== */
-.step-indicator {
-    display: flex !important;
-    align-items: center !important;
-    gap: 0.5rem !important;
-    margin-bottom: 1.5rem !important;
-}
-
-.step {
-    display: flex !important;
-    align-items: center !important;
-    gap: 0.5rem !important;
-}
-
-.step-number {
-    width: 28px !important;
-    height: 28px !important;
-    border-radius: 50% !important;
-    background: var(--gray-200) !important;
-    color: var(--gray-600) !important;
-    display: flex !important;
-    align-items: center !important;
-    justify-content: center !important;
-    font-size: 0.875rem !important;
-    font-weight: 600 !important;
-}
-
-.step.active .step-number {
-    background: var(--primary-500) !important;
-    color: white !important;
-}
-
-.step.completed .step-number {
-    background: var(--primary-100) !important;
-    color: var(--primary-700) !important;
-}
-
-.step-line {
-    flex: 1 !important;
-    height: 2px !important;
-    background: var(--gray-200) !important;
-    margin: 0 0.5rem !important;
-}
-
 /* ========== CHIP/TAG STYLES ========== */
 .chip {
     display: inline-flex !important;
@@ -870,29 +704,37 @@ section[data-testid="stSidebar"] {
     border-color: var(--primary-200) !important;
 }
 
-/* ========== GRID SYSTEM ========== */
-.grid-2 {
-    display: grid !important;
-    grid-template-columns: repeat(2, 1fr) !important;
-    gap: 1rem !important;
+/* ========== COMPACT LAYOUT - REMOVED GRID SYSTEM ========== */
+/* No grid system - using st.columns instead for better control */
+
+/* ========== PAGE TRANSITIONS ========== */
+.fade-in-content {
+    animation: fadeIn 0.3s ease-in-out !important;
 }
 
-.grid-3 {
-    display: grid !important;
-    grid-template-columns: repeat(3, 1fr) !important;
-    gap: 1rem !important;
+@keyframes fadeIn {
+    from { opacity: 0; transform: translateY(10px); }
+    to { opacity: 1; transform: translateY(0); }
 }
 
-.grid-4 {
-    display: grid !important;
-    grid-template-columns: repeat(4, 1fr) !important;
-    gap: 1rem !important;
-}
-
-@media (max-width: 768px) {
-    .grid-2, .grid-3, .grid-4 {
-        grid-template-columns: 1fr !important;
+/* ========== HIGHLIGHT ANIMATIONS ========== */
+@keyframes highlightRow {
+    0% { 
+        background-color: rgba(124, 255, 178, 0.4) !important;
+        box-shadow: inset 0 0 0 1px rgba(16, 185, 129, 0.3) !important;
     }
+    70% { 
+        background-color: rgba(124, 255, 178, 0.1) !important;
+        box-shadow: inset 0 0 0 1px rgba(16, 185, 129, 0.1) !important;
+    }
+    100% { 
+        background-color: transparent !important;
+        box-shadow: none !important;
+    }
+}
+
+.highlight-row {
+    animation: highlightRow 2s ease-out !important;
 }
 
 </style>
@@ -1116,17 +958,17 @@ def render_home():
                     handle_page_transition("Companies", "Edit")
             
             # Quick stats in metric cards
-            st.markdown('<div class="grid-3">', unsafe_allow_html=True)
+            col1, col2, col3 = st.columns(3)
             
             banks = cached_banks(st.session_state.active_client_id)
-            with st.container():
+            with col1:
                 st.markdown('<div class="metric-card">', unsafe_allow_html=True)
                 st.markdown(f'<div class="metric-value">{len(banks) if banks else 0}</div>', unsafe_allow_html=True)
                 st.markdown('<div class="metric-label">Banks</div>', unsafe_allow_html=True)
                 st.markdown('</div>', unsafe_allow_html=True)
             
             cats = cached_categories(st.session_state.active_client_id)
-            with st.container():
+            with col2:
                 st.markdown('<div class="metric-card">', unsafe_allow_html=True)
                 st.markdown(f'<div class="metric-value">{len(cats) if cats else 0}</div>', unsafe_allow_html=True)
                 st.markdown('<div class="metric-label">Categories</div>', unsafe_allow_html=True)
@@ -1134,19 +976,17 @@ def render_home():
             
             try:
                 drafts = crud.drafts_summary(st.session_state.active_client_id, None)
-                with st.container():
+                with col3:
                     st.markdown('<div class="metric-card">', unsafe_allow_html=True)
                     st.markdown(f'<div class="metric-value">{len(drafts) if drafts else 0}</div>', unsafe_allow_html=True)
                     st.markdown('<div class="metric-label">Drafts</div>', unsafe_allow_html=True)
                     st.markdown('</div>', unsafe_allow_html=True)
             except:
-                with st.container():
+                with col3:
                     st.markdown('<div class="metric-card">', unsafe_allow_html=True)
                     st.markdown(f'<div class="metric-value">0</div>', unsafe_allow_html=True)
                     st.markdown('<div class="metric-label">Drafts</div>', unsafe_allow_html=True)
                     st.markdown('</div>', unsafe_allow_html=True)
-            
-            st.markdown('</div>', unsafe_allow_html=True)  # Close grid
             
             # Quick actions
             st.markdown("### Quick Actions")
@@ -1223,7 +1063,7 @@ def render_dashboard():
         if transactions:
             df = pd.DataFrame(transactions)
             
-            # Income vs Expense metrics in professional cards
+            # Income vs Expense metrics
             with st.container():
                 st.markdown('<div class="professional-card">', unsafe_allow_html=True)
                 st.markdown("### 💰 Income vs Expense")
@@ -1236,27 +1076,18 @@ def render_dashboard():
                 total_expense = df['debit'].sum()
                 net = total_income - total_expense
                 
-                st.markdown('<div class="grid-3">', unsafe_allow_html=True)
+                col1, col2, col3 = st.columns(3)
+                with col1:
+                    st.metric("Total Income", f"${total_income:,.2f}", 
+                             delta_color="off" if total_income == 0 else "normal")
+                with col2:
+                    st.metric("Total Expense", f"${total_expense:,.2f}", 
+                             delta_color="off" if total_expense == 0 else "inverse")
+                with col3:
+                    delta = f"{net:+,.2f}"
+                    st.metric("Net Profit", f"${net:,.2f}", delta=delta,
+                             delta_color="normal" if net >= 0 else "inverse")
                 
-                with st.container():
-                    st.markdown('<div class="metric-card">', unsafe_allow_html=True)
-                    st.markdown(f'<div class="metric-value">${total_income:,.2f}</div>', unsafe_allow_html=True)
-                    st.markdown('<div class="metric-label">Total Income</div>', unsafe_allow_html=True)
-                    st.markdown('</div>', unsafe_allow_html=True)
-                
-                with st.container():
-                    st.markdown('<div class="metric-card">', unsafe_allow_html=True)
-                    st.markdown(f'<div class="metric-value">${total_expense:,.2f}</div>', unsafe_allow_html=True)
-                    st.markdown('<div class="metric-label">Total Expense</div>', unsafe_allow_html=True)
-                    st.markdown('</div>', unsafe_allow_html=True)
-                
-                with st.container():
-                    st.markdown('<div class="metric-card">', unsafe_allow_html=True)
-                    st.markdown(f'<div class="metric-value">${net:,.2f}</div>', unsafe_allow_html=True)
-                    st.markdown('<div class="metric-label">Net Profit</div>', unsafe_allow_html=True)
-                    st.markdown('</div>', unsafe_allow_html=True)
-                
-                st.markdown('</div>', unsafe_allow_html=True)  # Close grid
                 st.markdown('</div>', unsafe_allow_html=True)
             
             # Transactions table
@@ -1463,38 +1294,34 @@ def render_settings():
                     
                     st.markdown(f"### Cleaning: **{client_name}**")
                     
-                    # Data type selection in grid
-                    st.markdown('<div class="grid-2">', unsafe_allow_html=True)
+                    # Data type selection in columns
+                    col1, col2 = st.columns(2)
                     
-                    with st.container():
+                    with col1:
                         st.markdown("**Transaction Data:**")
                         delete_drafts = st.checkbox("Draft Transactions", value=True, 
                                                   help="Uncategorised/unsaved transaction data")
                         delete_committed = st.checkbox("Committed Transactions", value=False,
                                                      help="Finalised/committed transaction history")
-                    
-                    with st.container():
+                        
                         st.markdown("**Setup Data:**")
                         delete_banks = st.checkbox("Bank Accounts", value=False,
                                                  help="Bank account definitions")
                         delete_categories = st.checkbox("Categories", value=False,
                                                       help="Category definitions")
                     
-                    with st.container():
+                    with col2:
                         st.markdown("**Learning Data:**")
                         delete_vendors = st.checkbox("Vendor Memory", value=False,
                                                    help="Learned vendor→category mappings")
                         delete_keywords = st.checkbox("Keyword Models", value=False,
                                                     help="Learned keyword→category patterns")
-                    
-                    with st.container():
+                        
                         st.markdown("**System Data:**")
                         delete_commits = st.checkbox("Commit History", value=False,
                                                    help="Commit records and accuracy metrics")
                         delete_client = st.checkbox("Company Itself", value=False,
                                                   help="Delete the entire company profile")
-                    
-                    st.markdown('</div>', unsafe_allow_html=True)  # Close grid
                     
                     # Warning message based on selection
                     selected_count = sum([
@@ -2328,36 +2155,35 @@ def render_categorisation():
                 else:
                     df_raw = st.session_state.df_raw
 
-            # Column Mapping
+            # Column Mapping - FIXED: Now in single row with columns
             if df_raw is not None and len(df_raw) > 0:
                 st.markdown("#### Column Mapping")
                 st.markdown('<p class="caption">Map CSV columns to transaction fields</p>', unsafe_allow_html=True)
                 
                 cols = ["(blank)"] + list(df_raw.columns)
                 
-                st.markdown('<div class="grid-5">', unsafe_allow_html=True)
+                # FIX: Using st.columns instead of grid system
+                map_cols = st.columns(5)
                 
-                with st.container():
+                with map_cols[0]:
                     st.markdown('<p class="label">Date *</p>', unsafe_allow_html=True)
                     map_date = st.selectbox("Date", cols, index=cols.index("Date") if "Date" in cols else 0, label_visibility="collapsed", key="map_date")
                 
-                with st.container():
+                with map_cols[1]:
                     st.markdown('<p class="label">Description *</p>', unsafe_allow_html=True)
                     map_desc = st.selectbox("Description", cols, index=cols.index("Description") if "Description" in cols else 0, label_visibility="collapsed", key="map_desc")
                 
-                with st.container():
+                with map_cols[2]:
                     st.markdown('<p class="label">Debit (Dr)</p>', unsafe_allow_html=True)
                     map_dr = st.selectbox("Debit", cols, index=cols.index("Dr") if "Dr" in cols else 0, label_visibility="collapsed", key="map_dr")
                 
-                with st.container():
+                with map_cols[3]:
                     st.markdown('<p class="label">Credit (Cr)</p>', unsafe_allow_html=True)
                     map_cr = st.selectbox("Credit", cols, index=cols.index("Cr") if "Cr" in cols else 0, label_visibility="collapsed", key="map_cr")
                 
-                with st.container():
+                with map_cols[4]:
                     st.markdown('<p class="label">Closing Balance</p>', unsafe_allow_html=True)
                     map_bal = st.selectbox("Closing", cols, index=cols.index("Closing") if "Closing" in cols else 0, label_visibility="collapsed", key="map_bal")
-                
-                st.markdown('</div>', unsafe_allow_html=True)
                 
                 # Date parsing function
                 def _to_date(x):
@@ -2643,36 +2469,24 @@ def render_categorisation():
             final_count = int(draft_summary.get("final_count") or 0)
             pending_rows = total_rows - final_count
             
-            st.markdown('<div class="grid-4">', unsafe_allow_html=True)
+            col1, col2, col3, col4 = st.columns(4)
             
-            with st.container():
-                st.markdown('<div class="metric-card">', unsafe_allow_html=True)
-                st.markdown(f'<div class="metric-value">{total_rows}</div>', unsafe_allow_html=True)
-                st.markdown('<div class="metric-label">Total Rows</div>', unsafe_allow_html=True)
-                st.markdown('</div>', unsafe_allow_html=True)
+            with col1:
+                st.metric("Total Rows", total_rows)
             
-            with st.container():
-                st.markdown('<div class="metric-card">', unsafe_allow_html=True)
+            with col2:
                 suggested_pct = (suggested_count / total_rows * 100) if total_rows > 0 else 0
-                st.markdown(f'<div class="metric-value">{suggested_count}</div>', unsafe_allow_html=True)
-                st.markdown(f'<div class="metric-label">AI Suggested ({suggested_pct:.0f}%)</div>', unsafe_allow_html=True)
-                st.markdown('</div>', unsafe_allow_html=True)
+                st.metric("AI Suggested", suggested_count, f"{suggested_pct:.1f}%")
             
-            with st.container():
-                st.markdown('<div class="metric-card">', unsafe_allow_html=True)
+            with col3:
                 final_pct = (final_count / total_rows * 100) if total_rows > 0 else 0
-                st.markdown(f'<div class="metric-value">{final_count}</div>', unsafe_allow_html=True)
-                st.markdown(f'<div class="metric-label">User Finalised ({final_pct:.0f}%)</div>', unsafe_allow_html=True)
-                st.markdown('</div>', unsafe_allow_html=True)
+                st.metric("User Finalised", final_count, f"{final_pct:.1f}%")
             
-            with st.container():
-                st.markdown('<div class="metric-card">', unsafe_allow_html=True)
+            with col4:
                 pending_pct = (pending_rows / total_rows * 100) if total_rows > 0 else 0
-                st.markdown(f'<div class="metric-value">{pending_rows}</div>', unsafe_allow_html=True)
-                st.markdown(f'<div class="metric-label">Pending Review ({pending_pct:.0f}%)</div>', unsafe_allow_html=True)
-                st.markdown('</div>', unsafe_allow_html=True)
+                delta_color = "inverse" if pending_rows > 0 else "normal"
+                st.metric("Pending Review", pending_rows, f"{pending_pct:.1f}%", delta_color=delta_color)
             
-            st.markdown('</div>', unsafe_allow_html=True)  # Close grid
             st.markdown('</div>', unsafe_allow_html=True)
     
     # --- Step 7: Action Buttons ---
@@ -2812,27 +2626,13 @@ def render_categorisation():
                 
                 if commit_info:
                     info = commit_info[0]
-                    st.markdown('<div class="grid-3">', unsafe_allow_html=True)
-                    
-                    with st.container():
-                        st.markdown('<div class="metric-card">', unsafe_allow_html=True)
-                        st.markdown(f'<div class="metric-value">{info.get("rows_committed", 0)}</div>', unsafe_allow_html=True)
-                        st.markdown('<div class="metric-label">Rows Committed</div>', unsafe_allow_html=True)
-                        st.markdown('</div>', unsafe_allow_html=True)
-                    
-                    with st.container():
-                        st.markdown('<div class="metric-card">', unsafe_allow_html=True)
-                        st.markdown(f'<div class="metric-value">{info.get("accuracy", 0)*100:.1f}%</div>', unsafe_allow_html=True)
-                        st.markdown('<div class="metric-label">Accuracy</div>', unsafe_allow_html=True)
-                        st.markdown('</div>', unsafe_allow_html=True)
-                    
-                    with st.container():
-                        st.markdown('<div class="metric-card">', unsafe_allow_html=True)
-                        st.markdown(f'<div class="metric-value">{info.get("committed_by", "N/A")}</div>', unsafe_allow_html=True)
-                        st.markdown('<div class="metric-label">Committed By</div>', unsafe_allow_html=True)
-                        st.markdown('</div>', unsafe_allow_html=True)
-                    
-                    st.markdown('</div>', unsafe_allow_html=True)  # Close grid
+                    col1, col2, col3 = st.columns(3)
+                    with col1:
+                        st.metric("Rows Committed", info.get("rows_committed", 0))
+                    with col2:
+                        st.metric("Accuracy", f"{info.get('accuracy', 0)*100:.1f}%")
+                    with col3:
+                        st.metric("Committed By", info.get("committed_by", "N/A"))
             
             st.markdown('</div>', unsafe_allow_html=True)
     
